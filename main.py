@@ -44,7 +44,6 @@ class MyWindow(QMainWindow):
         self.chemin_disque         = None
         self.panel_active          = False
         self.affichage_double      = None
-        self.open_panel = False
 
         self.setWindowTitle("Optic Vision Pro")
         self.resize(960, 620)
@@ -80,11 +79,6 @@ class MyWindow(QMainWindow):
         self.lbl_import.setStyleSheet(
             "color: #222; font-size: 18px; background: transparent;"
         )
-        
-        if self.open_panel is False:
-            self.lbl_import.setCursor(Qt.PointingHandCursor)
-            self.lbl_import.triggered.connect(self.open)
-            self.open_panel = True
 
         panel_layout.addWidget(self.lbl_import)
         main_layout.addWidget(self.panel_centre)
