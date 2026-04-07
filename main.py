@@ -16,6 +16,8 @@ import mesures_box as mb
 import plein_ecran as pe 
 import affiche_seg as af
 import segmentation as seg
+import measurements2 as m_script
+
 
 
 CARD  = "#b0b0b0"
@@ -119,7 +121,7 @@ class MyWindow(QMainWindow):
             style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
         )
         self.act_run_seg.setEnabled(False)
-        self.act_run_seg.triggered.connect(self.lancer_segmentation)
+        self.act_run_seg.triggered.connect(self.mesure)
 
         self.actAfficherToolbox = QAction("&Mesures", self)
         self.actAfficherToolbox.setCheckable(True)
@@ -233,11 +235,31 @@ class MyWindow(QMainWindow):
             
         
     #------------------ACTION 6 : LANCER LA SEGMENTATION-----------------
-    def lancer_segmentation(self):
-        self.statusBar().showMessage("Segmentation IA en cours...")
-        self.segmentation_terminee = True
-        self.act_run_seg.setEnabled(False)
+    def mesure(self):
+        # self.segmentation_terminee = True
         self._init_toolbox()
+        
+        if not self.chemin_image:
+            print("Erreur : Aucune image chargée.")
+            return
+
+        nom_image = os.path.basename(self.chemin_image)
+        
+        nom_masque = nom_image.replace(".jpg", ".png")
+        self.statusBar().showMessage("Veuillez patienter...")
+
+        base_dir = "segmentation_masks"
+        art_dir  = os.path.dirname(self.chemin_arteres)  # → .../segmentation_masks/arteries
+        vein_dir = os.path.dirname(self.chemin_veines)   # → .../segmentation_masks/veins
+        od_dir   = os.path.dirname(self.chemin_disque)   # → .../segmentation_masks/od
+        output_csv = "test_mesures.csv"
+
+        args = ["measurements2.py", art_dir, vein_dir, od_dir, output_csv, nom_masque]
+
+        m_script.main(args)
+        self.statusBar().showMessage("Mesures terminées.")
+
+
         
     #-----------------ACTION 7: OUVRIR MESURES----------------
     def _init_toolbox(self):
@@ -253,7 +275,19 @@ class MyWindow(QMainWindow):
             return
         pe.PleinEcranWindow(self, chemin=self.chemin_image).exec()
     
-            
+    #------------------ACTION 9 : REUNITIALISER ET SAUVEGARDER-----------------
+    def reset(self):
+        self.chemin_image          = None
+        self.chemin_veines         = None
+        self.chemin_arteres        = None
+        self.chemin_disque         = None
+        self.panel_active          = False
+        self.affichage_double      = None
+        self.od_valide             = False
+        self.segmentation_terminee = False
+        self.statusBar().showMessage("ETAPE 1 : Telecharger une image de fond d'oeil.")
+        
+        
     
  
 if __name__ == "__main__":
