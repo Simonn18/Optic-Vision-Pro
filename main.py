@@ -1,5 +1,6 @@
 import sys
 import os
+import shutil
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont
@@ -7,7 +8,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog,
     QLabel, QMenu, QStatusBar, QDialog, QVBoxLayout, QHBoxLayout,
     QPushButton, QWidget, QStyle, QDockWidget, QCheckBox,
-    QGroupBox, QScrollArea, QFrame, QSizePolicy)
+    QGroupBox, QScrollArea, QFrame, QSizePolicy, QInputDialog)
 
 
 import image_ref as ir
@@ -17,7 +18,8 @@ import plein_ecran as pe
 import affiche_seg as af
 import segmentation as seg
 import measurements2 as m_script
-
+import superposition_imagesv3 as sp
+import read_csv as rc
 
 
 CARD  = "#b0b0b0"
@@ -38,18 +40,20 @@ class MyWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.od_valide             = False
+        self.od_valide = False
         self.segmentation_terminee = False
-        self.chemin_image          = None
-        self.chemin_veines         = None
-        self.chemin_arteres        = None
-        self.chemin_disque         = None
-        self.panel_active          = False
-        self.affichage_double      = None
+        self.chemin_dossier = None
+        self.chemin_image = None
+        self.chemin_veines = None
+        self.chemin_arteres = None 
+        self.chemin_disque= None
+        self.panel_active = False
+        self.affichage_double = None
+        self.segmentation_window = None
+        self.toolbox = None
 
         self.setWindowTitle("Optic Vision Pro")
         self.resize(960, 620)
-
         self._init_actions()
         self._create_menus()
         self._init_panels()
@@ -92,14 +96,22 @@ class MyWindow(QMainWindow):
     def _init_actions(self):
         style = self.style()
 
+        self.charger_dossier = QAction("&Créer/ouvrir un dossier", self)
+        self.charger_dossier.setShortcut("Ctrl+L")
+        self.charger_dossier.setStatusTip("creer/charger dossier")
+        self.charger_dossier.triggered.connect(self.creer_charger_dossier_travail)
+        
         self.actOpen = QAction("&Ouvrir...", self)
         self.actOpen.setShortcut("Ctrl+O")
         self.actOpen.setStatusTip("Ouvrir un fichier image")
+        self.actOpen.setEnabled(False)
         self.actOpen.triggered.connect(self.open)
 
         self.actSave = QAction("&Enregistrer", self)
         self.actSave.setShortcut("Ctrl+S")
         self.actSave.setStatusTip("Enregistrer le fichier")
+        self.actSave.setEnabled(False)
+        self.actSave.triggered.connect(self.save)
 
         self.actOpacite = QAction("&Opacite", self)
         self.actOpacite.setShortcut("Ctrl+T")
@@ -116,7 +128,7 @@ class MyWindow(QMainWindow):
         self.act_valider_od.setEnabled(False)
         self.act_valider_od.triggered.connect(self.valider_disque_optique)
 
-        self.act_run_seg = QAction("Lancer la Segmentation", self)
+        self.act_run_seg = QAction("Lancer les mesures", self)
         self.act_run_seg.setIcon(
             style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
         )
@@ -133,6 +145,7 @@ class MyWindow(QMainWindow):
         self.actPleinEcran = QAction("&Plein ecran", self)
         self.actPleinEcran.setShortcut("Ctrl+P")
         self.actPleinEcran.setStatusTip("Afficher en plein ecran")
+        self.actPleinEcran.setEnabled(False)
         self.actPleinEcran.triggered.connect(self.open_plein_ecran)
 
         self.actAbout  = QAction("A propos", self)
@@ -146,6 +159,8 @@ class MyWindow(QMainWindow):
         mb = self.menuBar()
 
         m_fichier = mb.addMenu("&Fichier")
+        m_fichier.addAction(self.charger_dossier)
+        m_fichier.addSeparator()
         m_fichier.addAction(self.actOpen)
         m_fichier.addSeparator()
         m_fichier.addAction(self.actSave)
@@ -174,20 +189,44 @@ class MyWindow(QMainWindow):
     #FONCTION APPELEE PAR LES ACTIONS
     #__________________________________________
 
+
+    #-----------------ACTION 0 : CRÉER REPERTOIRE DE TRAVAIL------
+                
+    def creer_charger_dossier_travail(self):
+        if self.chemin_dossier is None:
+            chemin_dossier = QFileDialog.getExistingDirectory(self, "Choisir un dossier de travail", os.getcwd())
+            if chemin_dossier:
+                # Logique pour charger les données du dossier
+                QMessageBox.information(self, "Dossier chargé", f"Dossier '{chemin_dossier}' chargé avec succès.")
+                self.actOpen.setEnabled(True)
+                self.chemin_dossier = chemin_dossier
+            else:
+                QMessageBox.warning(self, "Erreur", "Aucun dossier sélectionné.")
+                print(self.chemin_dossier)
+        else:
+            self.reset()
+            self.chemin_dossier = None
+        
+        
     #------------------ACTION 1 : CHARGER IMAGE-----------------
     @Slot()
     def open(self):
-        chemin, _ = QFileDialog.getOpenFileName(
-            self,
-            "Choisir une image","", "Images (*.jpg)" 
-        )
-        if chemin:  
-            self.chemin_image = chemin
-            ir.charger_image_dans_label(self.lbl_import, chemin)
-            self.panel_active = True  
-            self.statusBar().showMessage("Image chargée avec succès. ÉTAPE 2 : Ajouter les segmentations.")
-            self.tableau_seg()
-            self.actOpacite.setEnabled(True)
+        if self.chemin_image is None:
+            chemin, _ = QFileDialog.getOpenFileName(
+                self,
+                "Choisir une image","", "Images (*.jpg)" 
+            )
+            if chemin:  
+                self.chemin_image = chemin
+                ir.charger_image_dans_label(self.lbl_import, chemin)
+                self.panel_active = True  
+                self.statusBar().showMessage("Image chargée avec succès. ÉTAPE 2 : Ajouter les segmentations.")
+                self.tableau_seg()
+                self.actOpacite.setEnabled(True)
+                self.actSave.setEnabled(True)
+                self.actPleinEcran.setEnabled(True)
+        else:
+            self.reset()
             
             
     #------------------ACTION 2 : AFFICHER/SUPPRIMER LES SEGMENTATIONS-----------------
@@ -199,15 +238,10 @@ class MyWindow(QMainWindow):
     
     
     def on_segmentation_appliquee(self, sel: dict):
-        if sel["veines"]:
-            af.affiche_seg(self,"veines",chemin=self.chemin_image)
-        if sel["arteres"]:
-            af.affiche_seg(self,"arteres",chemin=self.chemin_image)
-        if sel["disque"]:
-            af.affiche_seg(self,"disque",chemin=self.chemin_image)
-            self.actEditerDisque.setEnabled(True)
-            self.act_valider_od.setEnabled(True)
-    
+        self.image_composite = af.affiche_seg(self, sel, chemin=self.chemin_image)
+        self.actEditerDisque.setEnabled(True)
+        self.act_valider_od.setEnabled(True)
+        
                
     #------------------ACTION 3 : OUVRIR LA FENETRE OPACITE----------------
     def open_opacite(self):
@@ -240,7 +274,7 @@ class MyWindow(QMainWindow):
         self._init_toolbox()
         
         if not self.chemin_image:
-            print("Erreur : Aucune image chargée.")
+            print("Erreur : Aucune image chargÃ©e.")
             return
 
         nom_image = os.path.basename(self.chemin_image)
@@ -249,17 +283,43 @@ class MyWindow(QMainWindow):
         self.statusBar().showMessage("Veuillez patienter...")
 
         base_dir = "segmentation_masks"
-        art_dir  = os.path.dirname(self.chemin_arteres)  # → .../segmentation_masks/arteries
-        vein_dir = os.path.dirname(self.chemin_veines)   # → .../segmentation_masks/veins
-        od_dir   = os.path.dirname(self.chemin_disque)   # → .../segmentation_masks/od
+        art_dir  = self.chemin_abs("arteries")  # â†’ .../segmentation_masks/arteries
+        vein_dir = self.chemin_abs("veins")   # â†’ .../segmentation_masks/veins
+        od_dir   = self.chemin_abs("od")  # â†’ .../segmentation_masks/od
         output_csv = "test_mesures.csv"
 
         args = ["measurements2.py", art_dir, vein_dir, od_dir, output_csv, nom_masque]
 
-        m_script.main(args)
-        self.statusBar().showMessage("Mesures terminées.")
+        try:
+            m_script.main(args)
+            self.statusBar().showMessage("Mesure terminÃ©e. DonnÃ©es enregistrÃ©es dans test_mesure.csv.")
 
+            row_brute = rc.read_first_row(output_csv)
+            
+            if row_brute:
+                self.data_complete = rc.classer_donnees(row_brute)
 
+                rc.write_json(self.data_complete, "data.json")
+                
+                print("Succèss : Données extraites, classées et sauvegardées dans data.json")
+                
+
+                self.statusBar().showMessage("Analyse terminée. Données enregistrées dans data.json.")
+            else:
+                self.statusBar().showMessage("Erreur : Le script n'a gÃ©nÃ©rÃ© aucune ligne de donnÃ©es.")
+
+        except Exception as e:
+            print(f"Erreur lors de l'exÃ©cution : {e}")
+
+    def chemin_abs(self, type_seg):
+        abs_chemin = self.chemin_image
+
+        if "fundus_images" in abs_chemin:
+            abs_chemin = abs_chemin.rsplit("fundus_images", 1)
+            abs_chemin = f"segmentation_masks/{type_seg}".join(abs_chemin)
+
+        abs_chemin = os.path.dirname(abs_chemin)
+        return abs_chemin
         
     #-----------------ACTION 7: OUVRIR MESURES----------------
     def _init_toolbox(self):
@@ -270,13 +330,68 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 8 : PLEIN ECRAN-----------------
     def open_plein_ecran(self):
-        if self.chemin_image is None:
-            self.statusBar().showMessage("Chargez d'abord une image.")
+        fenetre = pe.PleinEcranWindow(
+            parent=self,
+            chemin=self.chemin_image,
+            image_composite=getattr(self, "image_composite", None)  # None si pas de segmentation
+        )
+        fenetre.exec()
+        
+    #----------------ACTION 9 : SAUVEGARDER-----------------
+    def save(self):
+        """Enregistre l'image originale, les segmentations et les mesures."""
+        print("aaa")
+        if not self.chemin_image:
+            self.statusBar().showMessage("Aucune image à enregistrer.")
             return
-        pe.PleinEcranWindow(self, chemin=self.chemin_image).exec()
+        
+        # Demande un dossier de destination
+        folder_path = self.chemin_dossier
+        print(folder_path)
+        if not folder_path:
+            return
+        
+        try:
+            # 1. Enregistrer l'image originale
+            nom_image = os.path.basename(self.chemin_image)
+            chemin_copie_image = os.path.join(folder_path, nom_image)
+            shutil.copy(self.chemin_image, chemin_copie_image)
+            
+            # 2. Enregistrer les segmentations (si elles existent)
+            if self.image_composite and os.path.exists(self.image_composite):
+                shutil.copy(self.image_composite, os.path.join(folder_path, "image_segmenté.png"))
+            
+            
+            
+            # 3. Enregistrer les mesures (CSV) si elles existent
+            if os.path.exists("test_mesures.csv"):
+                shutil.copy("test_mesures.csv", os.path.join(folder_path, "mesures.csv"))
+            
+            self.statusBar().showMessage(f"Image et mesures enregistrées dans {folder_path}")
+            QMessageBox.information(self, "Succès", f"Fichiers enregistrés dans :\n{folder_path}")
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Erreur lors de l'enregistrement : {str(e)}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement :\n{str(e)}")
     
-    #------------------ACTION 9 : REUNITIALISER ET SAUVEGARDER-----------------
+    #------------------ACTION 10 : REUNITIALISER ET SAUVEGARDER-----------------
     def reset(self):
+        rep = QMessageBox.question(self, "Validation", 
+            "Voulez-vous sauvegarder les précédentes modifications ?")
+
+        if rep == QMessageBox.Yes:
+            self.save()
+            self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
+        
+        # Fermer les fenêtres dock si elles existent
+        if self.segmentation_window is not None:
+            self.segmentation_window.close()
+            self.segmentation_window = None
+        
+        if self.toolbox is not None:
+            self.toolbox.close()
+            self.toolbox = None
+            
         self.chemin_image          = None
         self.chemin_veines         = None
         self.chemin_arteres        = None
@@ -286,10 +401,16 @@ class MyWindow(QMainWindow):
         self.od_valide             = False
         self.segmentation_terminee = False
         self.statusBar().showMessage("ETAPE 1 : Telecharger une image de fond d'oeil.")
-        
-        
-    
- 
+        self.actSave.setEnabled(False)
+        self.actOpacite.setEnabled(False)
+        self.actEditerDisque.setEnabled(False)
+        self.act_valider_od.setEnabled(False)
+        self.act_run_seg.setEnabled(False)
+        self.actPleinEcran.setEnabled(False)
+        self.lbl_import.clear()
+        self._init_panels()
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")

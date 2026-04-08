@@ -1,6 +1,8 @@
 import os
 from PySide6.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QGroupBox, QCheckBox, QPushButton, QHBoxLayout, QMessageBox, QScrollArea, QFrame)
 from PySide6.QtCore import Qt
+import read_csv as rc
+import json
 
 
 class MesuresToolbox(QDockWidget):
@@ -197,51 +199,86 @@ class MesuresToolbox(QDockWidget):
         self.show()
 
     def selections(self) -> tuple:
-        """Retourne 3 dictionnaires : (vaisseaux, zones, actions)"""
-        sel_vaisseaux = {
-            "veines":  self.cb_veines.isChecked(),
-            "arteres": self.cb_arteres.isChecked(),
-            "les2":    self.cb_les2.isChecked()
-        }
-        sel_zones = {
-            "zone_a": self.cb_zoneA.isChecked(),
-            "zone_b": self.cb_zoneB.isChecked(),
-            "zone_c": self.cb_zoneC.isChecked(),
-            "all":    self.cb_zoneAll.isChecked(),
-            "out":    self.cb_zoneOut.isChecked()
-        }
-        sel_actions = {
-            "wpr":           self.cb_wpr.isChecked(),
-            "vzr":           self.cb_vzr.isChecked(),
-            "cal_diam":      self.cb_cal_diam.isChecked(),
-            "topologie":     self.cb_topologie.isChecked(),
-            "tortuosite":    self.cb_tortuosite.isChecked(),
-            "pts_critiques": self.cb_pts_crit.isChecked(),
-        }
-        return sel_vaisseaux, sel_zones, sel_actions
-
-    def lancer_mesures(self):
-        sel_vaisseaux, sel_zones, sel_actions = self.selections()
-        
+        """Retourne 3 listes avec les noms exacts du JSON."""
         vaisseaux = []
-        for k,v in sel_vaisseaux.items():
-            if v:
-                vaisseaux.append(k)
+        if self.cb_veines.isChecked():  vaisseaux.append("Veins")
+        if self.cb_arteres.isChecked(): vaisseaux.append("Arteries")
+        if self.cb_les2.isChecked():    vaisseaux.append("AV")
 
         zones = []
-        for k,v in sel_zones.items():
-            if v:
-                zones.append(k)
-        actions = []
-        for k,v in sel_actions.items():
-            if v:
-                actions.append(k)
-        QMessageBox.information(self, "Mesures lancées",
-            f"Vaisseaux: {', '.join(vaisseaux)}\n"
-            f"Zones: {', '.join(zones)}\n"
-            f"Actions: {', '.join(actions)}"
-        )
-    
-        return vaisseaux, zones, actions 
+        if self.cb_zoneA.isChecked():   zones.append("A")
+        if self.cb_zoneB.isChecked():   zones.append("B")
+        if self.cb_zoneC.isChecked():   zones.append("C")
+        if self.cb_zoneAll.isChecked(): zones.append("All")
+        if self.cb_zoneOut.isChecked(): zones.append("Out")
 
-    
+        groupes = []
+        if self.cb_wpr.isChecked():        groupes.append("WPR")
+        if self.cb_vzr.isChecked():        groupes.append("VZR")
+        if self.cb_cal_diam.isChecked():   groupes.append("Calibre")
+        if self.cb_topologie.isChecked():  groupes.append("Topologie")
+        if self.cb_tortuosite.isChecked(): groupes.append("Tortuosite")
+        if self.cb_pts_crit.isChecked():   groupes.append("Points_critiques")
+
+        return vaisseaux, zones, groupes
+
+    def lancer_mesures(self):
+
+        vaisseaux, zones, groupes = self.selections()
+        
+        if not vaisseaux or not zones or not groupes:
+            QMessageBox.warning(self, "Sélection incomplète", 
+                                "Cochez au moins un élément dans chaque groupe.")
+            return
+
+
+        try:
+            with open('data.json', 'r') as f:
+                data_test = json.load(f)
+            
+            resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+            QMessageBox.information(self, "Succès","Les mesures ont été enregistées dans votre dossier")
+
+            print("--- DONNÉES FILTRÉES ---")
+            self._afficher_terminal(resultat)
+            
+            return resultat
+            
+        
+        except FileNotFoundError:
+            QMessageBox.critical(self, "Erreur", "Le fichier data.json est introuvable dans le dossier.")
+
+#fonction temporaire en vif pour afficher sur le terminal propre : 
+
+
+    def _afficher_terminal(self, res):
+            """Affiche les résultats dans le terminal de manière structurée (Clé = Valeur)."""
+
+            print("\n" + "═"*60)
+
+            if not res:
+                print(" ⚠️  Aucune donnée ne correspond à la sélection.")
+                return
+
+            for organe, zones in res.items():
+                # Titre de l'organe en gras/majuscule
+                print(f"\nORGANE : {organe.upper()}")
+                print(f"  " + "─"*30)
+
+                for zone, groupes in zones.items():
+                    print(f"ZONE {zone}")
+
+                    for groupe, mesures in groupes.items():
+                        # Affichage du nom du groupe (wpr, vzr, Calibre...)
+                        print(f"   mesures : {groupe}:")
+
+                        for cle, valeur in mesures.items():
+                            if isinstance(valeur, (float, int)):
+                                val_str = f"{valeur:.4f}"
+                            else:
+                                val_str = str(valeur)
+
+                            print(f"      • {cle.ljust(35)} = {val_str}")
+            
+            print("\n" + "═"*60 + "\n")
+        
