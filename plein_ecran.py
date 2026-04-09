@@ -21,10 +21,6 @@ class PleinEcranWindow(QDialog):
         self.lbl.setStyleSheet("background-color: transparent;")
         layout.addWidget(self.lbl)
 
-        btn = QPushButton("Fermer")
-        btn.clicked.connect(self.close)
-        layout.addWidget(btn)
-
         self._afficher_image()
 
     def _afficher_image(self):
@@ -36,20 +32,54 @@ class PleinEcranWindow(QDialog):
         largeur = ecran.width()
         hauteur = ecran.height()
 
-        if self.image_composite is not None:
-            h, w, _ = self.image_composite.shape
-            img = np.ascontiguousarray(self.image_composite)
-            qimg = QImage(img.data, w, h, 3 * w, QImage.Format_RGB888)
-            pixmap = QPixmap.fromImage(qimg)
-        elif self.chemin and os.path.exists(self.chemin):
-            pixmap = QPixmap(self.chemin)
-        else:
-            self.lbl.setText("Aucune image")
-            return
+        try:
+            pixmap = None
+            
+            if self.image_composite is not None and isinstance(self.image_composite, np.ndarray):
+                # Afficher l'image composée (priorité)
+                h, w = self.image_composite.shape[:2]
+                
+                # Vérifier le nombre de canaux
+                if len(self.image_composite.shape) == 3:
+                    channels = self.image_composite.shape[2]
+                else:
+                    # Image en niveaux de gris - la convertir en RGB
+                    img_gray = self.image_composite
+                    self.image_composite = np.stack([img_gray, img_gray, img_gray], axis=-1)
+                    channels = 3
+                
+                # Copier l'image pour éviter les problèmes de pointeurs
+                img = np.ascontiguousarray(self.image_composite)
+                
+                if channels == 3:
+                    # Créer QImage et le copier pour éviter les problèmes mémoire
+                    qimg = QImage(img.data, w, h, 3 * w, QImage.Format_RGB888).copy()
+                else:
+                    qimg = QImage(img.data, w, h, 4 * w, QImage.Format_RGBA8888).copy()
+                
+                pixmap = QPixmap.fromImage(qimg)
+                
+                if pixmap.isNull():
+                    print("Erreur : pixmap est null pour image_composite")
+                    raise Exception("Impossible de créer le pixmap de l'image composée")
+                    
+            elif self.chemin and os.path.exists(self.chemin):
+                # Sinon afficher l'image du chemin
+                pixmap = QPixmap(self.chemin)
+            else:
+                self.lbl.setText("Aucune image disponible\n(Appliquez les segmentations d'abord)")
+                return
 
-        self.lbl.setPixmap(
-            pixmap.scaled(largeur, hauteur, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        )
+            if pixmap and not pixmap.isNull():
+                self.lbl.setPixmap(
+                    pixmap.scaled(largeur, hauteur, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                )
+            else:
+                self.lbl.setText("Erreur : impossible d'afficher l'image")
+                
+        except Exception as e:
+            print(f"Erreur affichage plein écran : {str(e)}")
+            self.lbl.setText(f"Erreur affichage : {str(e)}")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -40,11 +40,13 @@ def composer_et_afficher(label, chemin_base: str, couches: list):
     """
     Compose l'image de base + toutes les couches en une seule passe.
     couches = [{"chemin": ..., "color": "RED"}, ...]
+    Retourne le numpy array de l'image composée.
     """
     if not chemin_base or not os.path.exists(chemin_base):
         label.setText(f"Erreur : image introuvable\n{chemin_base}")
         label.setStyleSheet("color: red;")
-        return
+        print(f"Erreur: chemin introuvable {chemin_base}")
+        return None
 
     # 1. Image de base
     base = io.imread(chemin_base)
@@ -58,6 +60,7 @@ def composer_et_afficher(label, chemin_base: str, couches: list):
     for couche in couches:
         img_couche = get_image_coloree(couche["chemin"], couche["color"])
         if img_couche is None:
+            print(f"Avertissement: couche introuvable {couche['chemin']}")
             continue
 
         # Redimensionner si nécessaire
@@ -84,11 +87,15 @@ def composer_et_afficher(label, chemin_base: str, couches: list):
     if pixmap.isNull():
         label.setText("Erreur : impossible de composer l'image")
         label.setStyleSheet("color: red;")
-        return
+        print("Erreur: pixmap est null")
+        return None
 
     scaled = pixmap.scaled(label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
     label.setPixmap(scaled)
     label.setText("")
+    
+    print(f"Succès: image composée retournée ({h}x{w})")
+    return final
 
 
 def charger_image_dans_label(label, chemin, color=None):

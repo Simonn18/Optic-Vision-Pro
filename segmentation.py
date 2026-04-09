@@ -103,6 +103,7 @@ class SegmentationToolbox(QDockWidget):
 
         self.cb_disque  = QCheckBox("Disque optique")
         self.cb_disque.clicked.connect(self.appliquer)
+        
 
         couches_cbs = [self.cb_veines, self.cb_arteres, self.cb_disque]
 

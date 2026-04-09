@@ -1,7 +1,10 @@
 import sys
 import os
 import shutil
+import cv2
+import numpy as np
 
+from PySide6 import QtGui
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont
 from PySide6.QtWidgets import (
@@ -18,7 +21,7 @@ import plein_ecran as pe
 import affiche_seg as af
 import segmentation as seg
 import measurements2 as m_script
-import superposition_imagesv3 as sp
+# import superposition_imagesv3 as sp
 import read_csv as rc
 
 
@@ -51,6 +54,7 @@ class MyWindow(QMainWindow):
         self.affichage_double = None
         self.segmentation_window = None
         self.toolbox = None
+        self.image_composite = None
 
         self.setWindowTitle("Optic Vision Pro")
         self.resize(960, 620)
@@ -77,7 +81,7 @@ class MyWindow(QMainWindow):
         panel_layout = QVBoxLayout(self.panel_centre)
 
         self.lbl_import = QLabel(
-            "GLISSER UN FICHIER OU\nRECHERCHER UN FICHIER\nSUR L'ORDINATEUR",
+            "CHARGER OU CREER UN DOSSIER\nET RECHERCHER UN FICHIER\nSUR L'ORDINATEUR",
             self.panel_centre,
         )
         self.lbl_import.setAlignment(Qt.AlignCenter)
@@ -125,10 +129,12 @@ class MyWindow(QMainWindow):
         self.actEditerDisque.setEnabled(False)
 
         self.act_valider_od = QAction("Valider le Disque Optique", self)
+        self.act_valider_od.setShortcut("Ctrl+Y")
         self.act_valider_od.setEnabled(False)
         self.act_valider_od.triggered.connect(self.valider_disque_optique)
 
         self.act_run_seg = QAction("Lancer les mesures", self)
+        self.act_run_seg.setShortcut("Ctrl+M")
         self.act_run_seg.setIcon(
             style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
         )
@@ -137,7 +143,6 @@ class MyWindow(QMainWindow):
 
         self.actAfficherToolbox = QAction("&Mesures", self)
         self.actAfficherToolbox.setCheckable(True)
-        self.actAfficherToolbox.setShortcut("Ctrl+M")
         self.actAfficherToolbox.setStatusTip(
             "Afficher / masquer la boite a outils des mesures"
         )
@@ -226,6 +231,7 @@ class MyWindow(QMainWindow):
                 self.actSave.setEnabled(True)
                 self.actPleinEcran.setEnabled(True)
         else:
+            
             self.reset()
             
             
@@ -238,7 +244,13 @@ class MyWindow(QMainWindow):
     
     
     def on_segmentation_appliquee(self, sel: dict):
+        print(f"Segmentation appliquée : {sel}")
         self.image_composite = af.affiche_seg(self, sel, chemin=self.chemin_image)
+        print(f"image_composite type après affiche_seg: {type(self.image_composite)}")
+        if hasattr(self.image_composite, 'shape'):
+            print(f"image_composite shape: {self.image_composite.shape}")
+        else:
+            print(f"image_composite est None ou n'a pas d'attribut shape")
         self.actEditerDisque.setEnabled(True)
         self.act_valider_od.setEnabled(True)
         
@@ -330,45 +342,71 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 8 : PLEIN ECRAN-----------------
     def open_plein_ecran(self):
+        if self.chemin_image is None:
+            self.statusBar().showMessage("Chargez d'abord une image.")
+            return
+        
+        # Debug: afficher l'état du composite
+        has_composite = self.image_composite is not None and hasattr(self.image_composite, 'shape')
+        print(f"Debug plein écran - image_composite type: {type(self.image_composite)}, has_shape: {has_composite}")
+        
+        if not has_composite:
+            rep = QMessageBox.question(self, "Attention", 
+                "Aucune segmentation appliquée.\nAfficher l'image originale en plein écran ?")
+            if rep != QMessageBox.Yes:
+                return
+        
         fenetre = pe.PleinEcranWindow(
             parent=self,
             chemin=self.chemin_image,
-            image_composite=getattr(self, "image_composite", None)  # None si pas de segmentation
+            image_composite=self.image_composite if has_composite else None
         )
         fenetre.exec()
         
     #----------------ACTION 9 : SAUVEGARDER-----------------
     def save(self):
         """Enregistre l'image originale, les segmentations et les mesures."""
-        print("aaa")
         if not self.chemin_image:
             self.statusBar().showMessage("Aucune image à enregistrer.")
             return
         
-        # Demande un dossier de destination
+        # Demander le nom du fichier à l'utilisateur
+        sauv_fichier, ok = QInputDialog.getText(
+            self, 
+            'Sauvegarde',
+            'Entrez le nom que vous souhaitez pour les fichiers'
+        )
+        
+        if not ok or not sauv_fichier.strip():
+            self.statusBar().showMessage("Sauvegarde annulée.")
+            return
+        
         folder_path = self.chemin_dossier
-        print(folder_path)
         if not folder_path:
+            self.statusBar().showMessage("Aucun dossier sélectionné.")
             return
         
         try:
-            # 1. Enregistrer l'image originale
+            # 1. Enregistrer l'image originale avec le nom choisi
             nom_image = os.path.basename(self.chemin_image)
-            chemin_copie_image = os.path.join(folder_path, nom_image)
+            extension = os.path.splitext(nom_image)[1]  # Récupère l'extension (.jpg, .png, etc)
+            chemin_copie_image = os.path.join(folder_path, f"{sauv_fichier}_original{extension}")
             shutil.copy(self.chemin_image, chemin_copie_image)
-            
-            # 2. Enregistrer les segmentations (si elles existent)
-            if self.image_composite and os.path.exists(self.image_composite):
-                shutil.copy(self.image_composite, os.path.join(folder_path, "image_segmenté.png"))
-            
-            
+            print(f"Image originale sauvegardée : {chemin_copie_image}")
+
+            # 2. Enregistrer l'image composée (numpy array) si elle existe
+            if self.image_composite is not None and isinstance(self.image_composite, np.ndarray):
+                chemin_composite = os.path.join(folder_path, f"{sauv_fichier}_segmentée.png")
+                cv2.imwrite(chemin_composite, self.image_composite)
+                print(f"Image composée sauvegardée : {chemin_composite}")
             
             # 3. Enregistrer les mesures (CSV) si elles existent
             if os.path.exists("test_mesures.csv"):
-                shutil.copy("test_mesures.csv", os.path.join(folder_path, "mesures.csv"))
+                shutil.copy("test_mesures.csv", os.path.join(folder_path, f"{sauv_fichier}_mesures.csv"))
+                print(f"Mesures sauvegardées")
             
-            self.statusBar().showMessage(f"Image et mesures enregistrées dans {folder_path}")
-            QMessageBox.information(self, "Succès", f"Fichiers enregistrés dans :\n{folder_path}")
+            self.statusBar().showMessage(f"Fichiers sauvegardés dans {folder_path}")
+            QMessageBox.information(self, "Succès", f"Fichiers enregistrés dans :\n{folder_path}\nNom : {sauv_fichier}")
             
         except Exception as e:
             self.statusBar().showMessage(f"Erreur lors de l'enregistrement : {str(e)}")
