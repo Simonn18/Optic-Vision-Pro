@@ -93,8 +93,6 @@ def composer_et_afficher(label, chemin_base: str, couches: list):
     scaled = pixmap.scaled(label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
     label.setPixmap(scaled)
     label.setText("")
-    
-    print(f"Succès: image composée retournée ({h}x{w})")
     return final
 
 

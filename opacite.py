@@ -17,7 +17,7 @@ class Opacite(QDialog):
         #images de fond d'oeils
         self.slider_oeil = QSlider(Qt.Horizontal, self)
         self.forme_slider(self.slider_oeil, color=ORANGE, back_color="#f0d0d0")
-        self.slider_oeil.setGeometry(10, 20, 340, 24)
+        self.slider_oeil.setGeometry(0, 20, 340, 24)
         self.slider_oeil.setRange(0, 100)
         self.slider_oeil.setValue(100)
         self.slider_oeil.valueChanged.connect(self.valueChanged)
@@ -28,7 +28,7 @@ class Opacite(QDialog):
         #veines
         self.slider_veines = QSlider(Qt.Horizontal, self)
         self.forme_slider(self.slider_veines)
-        self.slider_veines.setGeometry(10, 60, 340, 24)
+        self.slider_veines.setGeometry(10, 60, 40, 24)
         self.slider_veines.setRange(0, 100)
         self.slider_veines.setValue(100)
         self.slider_veines.valueChanged.connect(self.valueChanged)
@@ -67,14 +67,14 @@ class Opacite(QDialog):
                 margin: 0px;
                 border-radius: 4px;
             }}
-            QSlider::handle:horizontal {{
-                background: {color};
-                border: 1px solid #5c5c5c;
-                width: 18px;
-                height: 18px;
-                margin: -5px 0;
-                border-radius: 9px;
-            }}
+            # QSlider::handle:horizontal {{
+            #     background: {color};
+            #     border: 1px solid #5c5c5c;
+            #     width: 18px;
+            #     height: 18px;
+            #     margin: -5px 0;
+            #     border-radius: 9px;
+            # }}
             QSlider::sub-page:horizontal {{
                 background: {color};
                 border: 1px solid #777777;

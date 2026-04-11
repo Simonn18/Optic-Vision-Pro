@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog,
     QLabel, QMenu, QStatusBar, QDialog, QVBoxLayout, QHBoxLayout,
     QPushButton, QWidget, QStyle, QDockWidget, QCheckBox,
-    QGroupBox, QScrollArea, QFrame, QSizePolicy, QInputDialog)
+    QGroupBox, QScrollArea, QFrame, QSizePolicy, QInputDialog, QSplashScreen)
 
 
 import image_ref as ir
@@ -25,17 +25,22 @@ import measurements2 as m_script
 import read_csv as rc
 
 
-CARD  = "#b0b0b0"
+CARD  = "#000000"
 BG    = "#f0f0f0"
+
+#installer pyinstaller 
+#pip3 install PySide6 PyInstaller
+#pyinstaller --windowed main.py
+
 
 
 #_______________________________
 # Création panel central 
 #________________________________
 def make_panel(parent, color=CARD): # Fond gris derriere les images 
-    """Crée un panneau gris arrondi."""
+    """Crée un panneau noir arrondi."""
     panel = QWidget(parent)
-    panel.setStyleSheet(f"background-color: {color}; border-radius: 40px;")
+    panel.setStyleSheet(f"background-color: {color}; border-radius: 20px;")
     return panel
 
 
@@ -87,12 +92,12 @@ class MyWindow(QMainWindow):
         self.lbl_import.setAlignment(Qt.AlignCenter)
         self.lbl_import.setWordWrap(True)
         self.lbl_import.setStyleSheet(
-            "color: #222; font-size: 18px; background: transparent;"
+            "color: #F7F2FF; font-size: 18px; background: transparent, bold;"
         )
 
         panel_layout.addWidget(self.lbl_import)
         main_layout.addWidget(self.panel_centre)
-
+ 
     # ──────────────────────────────────────────────
     # Actions
     # ──────────────────────────────────────────────
@@ -108,7 +113,7 @@ class MyWindow(QMainWindow):
         self.actOpen = QAction("&Ouvrir...", self)
         self.actOpen.setShortcut("Ctrl+O")
         self.actOpen.setStatusTip("Ouvrir un fichier image")
-        self.actOpen.setEnabled(False)
+        self.actOpen.setEnabled(True)
         self.actOpen.triggered.connect(self.open)
 
         self.actSave = QAction("&Enregistrer", self)
@@ -121,7 +126,7 @@ class MyWindow(QMainWindow):
         self.actOpacite.setShortcut("Ctrl+T")
         self.actOpacite.setStatusTip("Regler l'opacite")
         self.actOpacite.setEnabled(False)
-        self.actOpacite.triggered.connect(self.open_opacite)
+        #self.actOpacite.triggered.connect(self.open_opacite)
 
         self.actEditerDisque = QAction("&Editer le disque", self)
         self.actEditerDisque.setShortcut("Ctrl+E")
@@ -131,7 +136,7 @@ class MyWindow(QMainWindow):
         self.act_valider_od = QAction("Valider le Disque Optique", self)
         self.act_valider_od.setShortcut("Ctrl+Y")
         self.act_valider_od.setEnabled(False)
-        self.act_valider_od.triggered.connect(self.valider_disque_optique)
+        #self.act_valider_od.triggered.connect(self.valider_disque_optique)
 
         self.act_run_seg = QAction("Lancer les mesures", self)
         self.act_run_seg.setShortcut("Ctrl+M")
@@ -170,17 +175,17 @@ class MyWindow(QMainWindow):
         m_fichier.addSeparator()
         m_fichier.addAction(self.actSave)
         
-        m_outils = mb.addMenu("&Outils")
-        m_outils.addAction(self.actEditerDisque)
-        m_outils.addAction(self.actOpacite)
+        # m_outils = mb.addMenu("&Outils")
+        # m_outils.addAction(self.actEditerDisque)
+        # m_outils.addAction(self.actOpacite)
 
-        m_config = mb.addMenu("&Configuration")
-        m_config.addAction(self.act_valider_od)
+        # m_config = mb.addMenu("&Configuration")
+        # m_config.addAction(self.act_valider_od)
 
-        m_analyse = mb.addMenu("&Analyse")
-        m_analyse.addAction(self.act_run_seg)
-        m_analyse.addSeparator()
-        #m_analyse.addAction(self.actAfficherToolbox)
+        # m_analyse = mb.addMenu("&Analyse")
+        # m_analyse.addAction(self.act_run_seg)
+        # m_analyse.addSeparator()
+        # #m_analyse.addAction(self.actAfficherToolbox)
 
         m_pe = mb.addMenu("&Plein ecran")
         m_pe.addAction(self.actPleinEcran)
@@ -227,7 +232,6 @@ class MyWindow(QMainWindow):
                 self.panel_active = True  
                 self.statusBar().showMessage("Image chargée avec succès. ÉTAPE 2 : Ajouter les segmentations.")
                 self.tableau_seg()
-                self.actOpacite.setEnabled(True)
                 self.actSave.setEnabled(True)
                 self.actPleinEcran.setEnabled(True)
         else:
@@ -244,15 +248,7 @@ class MyWindow(QMainWindow):
     
     
     def on_segmentation_appliquee(self, sel: dict):
-        print(f"Segmentation appliquée : {sel}")
         self.image_composite = af.affiche_seg(self, sel, chemin=self.chemin_image)
-        print(f"image_composite type après affiche_seg: {type(self.image_composite)}")
-        if hasattr(self.image_composite, 'shape'):
-            print(f"image_composite shape: {self.image_composite.shape}")
-        else:
-            print(f"image_composite est None ou n'a pas d'attribut shape")
-        self.actEditerDisque.setEnabled(True)
-        self.act_valider_od.setEnabled(True)
         
                
     #------------------ACTION 3 : OUVRIR LA FENETRE OPACITE----------------
@@ -262,27 +258,25 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 4 : EDITER LE DISQUE OPTIQUE-----------------
     def edit_disque_optique(self):
-        return 
+        print("renvoie au parent")
          
-    #------------------ACTION 5 : VALIDER LE DISQUE OPTIQUE-----------------
-    def valider_disque_optique(self):
-        rep = QMessageBox.question(self, "Validation", 
-            "Confirmez-vous le placement du Disque Optique ?")
+    # #------------------ACTION 5 : VALIDER LE DISQUE OPTIQUE-----------------
+    # def valider_disque_optique(self):
+    #     rep = QMessageBox.question(self, "Validation", 
+    #         "Confirmez-vous le placement du Disque Optique ?")
 
-        if rep == QMessageBox.Yes:
-            self.od_valide = True
-            self.act_valider_od.setEnabled(False)
-            
-            self.act_run_seg.setEnabled(True) 
-            
-            self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
-        else:
-            self.statusBar().showMessage("Ajustez le disque optique avant de valider.")
+    #     if rep == QMessageBox.Yes:
+    #         self.od_valide = True
+                        
+    #         self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
+    #     else:
+    #         self.statusBar().showMessage("Ajustez le disque optique avant de valider.")
             
         
     #------------------ACTION 6 : LANCER LA SEGMENTATION-----------------
     def mesure(self):
         # self.segmentation_terminee = True
+        QMessageBox.information(self, "Mesures lancées", "Les mesures ont été lancées avec succès.")
         self._init_toolbox()
         
         if not self.chemin_image:
@@ -295,9 +289,9 @@ class MyWindow(QMainWindow):
         self.statusBar().showMessage("Veuillez patienter...")
 
         base_dir = "segmentation_masks"
-        art_dir  = self.chemin_abs("arteries")  # â†’ .../segmentation_masks/arteries
-        vein_dir = self.chemin_abs("veins")   # â†’ .../segmentation_masks/veins
-        od_dir   = self.chemin_abs("od")  # â†’ .../segmentation_masks/od
+        vein_dir = self.chemin_abs("veins")
+        art_dir  = self.chemin_abs("arteries") 
+        od_dir   = self.chemin_abs("od")  
         output_csv = "test_mesures.csv"
 
         args = ["measurements2.py", art_dir, vein_dir, od_dir, output_csv, nom_masque]
@@ -313,7 +307,7 @@ class MyWindow(QMainWindow):
 
                 rc.write_json(self.data_complete, "data.json")
                 
-                print("Succèss : Données extraites, classées et sauvegardées dans data.json")
+                print("Succès: Données extraites, classées et sauvegardées dans data.json")
                 
 
                 self.statusBar().showMessage("Analyse terminée. Données enregistrées dans data.json.")
@@ -451,7 +445,12 @@ class MyWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    pixmap = QPixmap(":/OPV.png")
+    splash = QSplashScreen(pixmap)
+    splash.show()
+    app.processEvents()  
     app.setStyle("Fusion")
     win = MyWindow()
     win.show()
+    splash.finish(win)
     sys.exit(app.exec())

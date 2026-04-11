@@ -58,8 +58,6 @@ class MesuresToolbox(QDockWidget):
     }
     QPushButton{
         background: #5555cc;
-        color: white;
-        border: none;
         border-radius: 6px;
         padding: 8px 0;
         font-size: 13px;
@@ -67,10 +65,10 @@ class MesuresToolbox(QDockWidget):
         margin-top: 6px;
     }
     QPushButton { background: #4444bb; }
-    QPushButton:disabled { background: #bbbbcc; color: #666666; }
+    QPushButton:disabled { background: #bbbbcc; }
     QPushButton {
         background: #e8e8f4;
-        color: #666666;
+        color: #000000;
         border: 1px solid #c0c0d8;
         border-radius: 4px;
         padding: 3px 10px;

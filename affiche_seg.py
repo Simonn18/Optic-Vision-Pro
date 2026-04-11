@@ -16,15 +16,20 @@ def affiche_seg(self, sel: dict, chemin=None):
         return ch
 
     couches = []
-    if sel.get("veines"):
+    if sel.get("veines", {}).get("visible"):
         self.chemin_veines = construire_chemin("veins")
-        couches.append({"chemin": self.chemin_veines, "color": "BLUE"})
-    if sel.get("arteres"):
+        opacity = sel["veines"]["opacity"] / 100
+        couches.append({"chemin": self.chemin_veines, "color": "BLUE", "opacity": opacity})
+
+    if sel.get("arteres", {}).get("visible"):
         self.chemin_arteres = construire_chemin("arteries")
-        couches.append({"chemin": self.chemin_arteres, "color": "RED"})
-    if sel.get("disque"):
+        opacity = sel["arteres"]["opacity"] / 100
+        couches.append({"chemin": self.chemin_arteres, "color": "RED", "opacity": opacity})
+
+    if sel.get("disque", {}).get("visible"):
         self.chemin_disque = construire_chemin("od")
-        couches.append({"chemin": self.chemin_disque, "color": "GREEN"})
+        opacity = sel["disque"]["opacity"] / 100
+        couches.append({"chemin": self.chemin_disque, "color": "GREEN", "opacity": opacity})
 
     # ✅ return du résultat de composer_et_afficher
     return ir.composer_et_afficher(self.lbl_import, self.chemin_image, couches)
