@@ -8,30 +8,24 @@ from PySide6 import QtGui
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QFileDialog, QColorDialog,
+    QApplication, QMainWindow, QMessageBox, QFileDialog, 
     QLabel, QMenu, QStatusBar, QDialog, QVBoxLayout, QHBoxLayout,
-    QPushButton, QWidget, QStyle, QDockWidget, QCheckBox,
+    QPushButton, QWidget, QStyle, QDockWidget, QCheckBox, QGraphicsScene, QGraphicsView,
     QGroupBox, QScrollArea, QFrame, QSizePolicy, QInputDialog, QSplashScreen)
 
-import segmentation as seg
-import image_ref as ir
 import opacite as op
 import mesures_box as mb
-import plein_ecran as pe 
-import affiche_seg as af
+import plein_ecran as pe
+import segmentation as seg
 import measurements2 as m_script
 # import superposition_imagesv3 as sp
 import read_csv as rc
-from palette import PaletteManager
+from chargement_images import load_images, images_paths
+from affichage_images import conversion_qpixmap
 
 
 CARD  = "#000000"
 BG    = "#f0f0f0"
-
-#installer pyinstaller 
-#pip3 install PySide6 PyInstaller
-#pyinstaller --windowed main.py
-
 
 
 #_______________________________
@@ -40,7 +34,7 @@ BG    = "#f0f0f0"
 def make_panel(parent, color=CARD): # Fond gris derriere les images 
     """Crée un panneau noir arrondi."""
     panel = QWidget(parent)
-    panel.setStyleSheet(f"background-color: {color}; border-radius: 40px;")
+    panel.setStyleSheet(f"background-color: {color}; border-radius: 20px;")
     return panel
 
 
@@ -60,16 +54,19 @@ class MyWindow(QMainWindow):
         self.segmentation_window = None
         self.toolbox = None
         self.image_composite = None
+        self.path_image_courante = None 
 
         self.setWindowTitle("Optic Vision Pro")
-        ecran = QApplication.primaryScreen().availableGeometry()
-        largeur = ecran.width()
-        hauteur = ecran.height()
-        self.resize(largeur, hauteur)
-        
+        self.resize(960, 620)
         self._init_actions()
         self._create_menus()
         self._init_panels()
+
+        self.couleurs = {
+            "veines":  (0,   0,   255, 255),
+            "arteres": (255, 0,   100, 255),
+            "disque":  (0,   255, 0,   255),
+        }
     
         self.setStatusBar(QStatusBar(self))
         self.statusBar().showMessage("ETAPE 1 : Telecharger une image de fond d'oeil.")
@@ -89,6 +86,11 @@ class MyWindow(QMainWindow):
         self.panel_centre = make_panel(self.bg)
         panel_layout = QVBoxLayout(self.panel_centre)
 
+        # Remplacement du QLabel par une QGraphicsView
+        self.scene = QGraphicsScene()
+        self.vue = QGraphicsView(self.scene)
+        self.vue.setStyleSheet("background: transparent; border: none;")
+
         self.lbl_import = QLabel(
             "CHARGER OU CREER UN DOSSIER\nET RECHERCHER UN FICHIER\nSUR L'ORDINATEUR",
             self.panel_centre,
@@ -99,10 +101,16 @@ class MyWindow(QMainWindow):
             "color: #F7F2FF; font-size: 18px; background: transparent, bold;"
         )
 
+        # Calques de la scène (None tant qu'aucune image n'est chargée)
+        self.item_fundus    = None
+        self.item_veins     = None
+        self.item_arteries  = None
+        self.item_od        = None
+
         panel_layout.addWidget(self.lbl_import)
+        panel_layout.addWidget(self.vue)
+        self.vue.hide()  # cachée jusqu'au chargement d'une image
         main_layout.addWidget(self.panel_centre)
- 
- 
  
     # ──────────────────────────────────────────────
     # Actions
@@ -220,7 +228,7 @@ class MyWindow(QMainWindow):
                 QMessageBox.warning(self, "Erreur", "Aucun dossier sélectionné.")
                 print(self.chemin_dossier)
         else:
-            self.reset("de dossier")
+            self.reset()
             self.chemin_dossier = None
         
         
@@ -234,7 +242,38 @@ class MyWindow(QMainWindow):
             )
             if chemin:  
                 self.chemin_image = chemin
-                ir.charger_image_dans_label(self.lbl_import, chemin)
+                self.path_image_courante = chemin
+                list_paths = images_paths(chemin)
+                image_originale, mask_veins, mask_arteries, mask_od = load_images(list_paths)
+                pixmap_fundus, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
+                    image_originale, mask_veins, mask_arteries, mask_od
+                )
+                
+                
+                
+           
+        
+                
+                
+                
+                
+
+                # Initialisation de la scène
+                self.scene.clear()
+                self.item_fundus    = self.scene.addPixmap(pixmap_fundus)
+                self.item_veins     = self.scene.addPixmap(pixmap_veins)
+                self.item_arteries  = self.scene.addPixmap(pixmap_arteries)
+                self.item_od        = self.scene.addPixmap(pixmap_od)
+
+                self.item_veins.setOpacity(0.5)
+                self.item_arteries.setOpacity(0.5)
+                self.item_od.setOpacity(0.5)
+
+                # Affichage
+                self.lbl_import.hide()
+                self.vue.show()
+                self.vue.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
                 self.panel_active = True  
                 self.statusBar().showMessage("Image chargée avec succès. ÉTAPE 2 : Ajouter les segmentations.")
                 self.tableau_seg()
@@ -242,7 +281,7 @@ class MyWindow(QMainWindow):
                 self.actPleinEcran.setEnabled(True)
         else:
             
-            self.reset("d'image")
+            self.reset()
             
             
     #------------------ACTION 2 : AFFICHER/SUPPRIMER LES SEGMENTATIONS-----------------
@@ -251,13 +290,31 @@ class MyWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.segmentation_window)
         self.actAfficherToolbox.triggered.connect(self.segmentation_window.setVisible)
         self.segmentation_window.visibilityChanged.connect(self.actAfficherToolbox.setChecked)
+        
+        # ✅ Activer automatiquement toutes les segmentations
+        self.segmentation_window.activate_all_segmentations()
     
     
     def on_segmentation_appliquee(self, sel: dict):
-        if sel["disque"]["visible"]:
-            self.statusBar().showMessage("Valider le disque optique avant de lancer les mesures")
-        self.image_composite = af.affiche_seg(self, sel, chemin=self.chemin_image)
-        
+        if self.item_fundus is None:
+            return
+
+        self.item_fundus.setOpacity(sel.get("image_opacity", 100) / 100.0)
+
+        if sel.get("veines", {}).get("visible"):
+            self.item_veins.setOpacity(sel["veines"]["opacity"] / 100.0)
+        else:
+            self.item_veins.setOpacity(0)
+
+        if sel.get("arteres", {}).get("visible"):
+            self.item_arteries.setOpacity(sel["arteres"]["opacity"] / 100.0)
+        else:
+            self.item_arteries.setOpacity(0)
+
+        if sel.get("disque", {}).get("visible"):
+            self.item_od.setOpacity(sel["disque"]["opacity"] / 100.0)
+        else:
+            self.item_od.setOpacity(0)
                
     #------------------ACTION 3 : OUVRIR LA FENETRE OPACITE----------------
     def open_opacite(self):
@@ -266,8 +323,7 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 4 : EDITER LE DISQUE OPTIQUE-----------------
     def edit_disque_optique(self):
-        return 
-    
+        print("renvoie au parent")
          
     # #------------------ACTION 5 : VALIDER LE DISQUE OPTIQUE-----------------
     # def valider_disque_optique(self):
@@ -282,7 +338,7 @@ class MyWindow(QMainWindow):
     #         self.statusBar().showMessage("Ajustez le disque optique avant de valider.")
             
         
-    #------------------ACTION 6 : LANCER LA SEGMENTATION-----------------
+    #------------------ACTION 6 : LANCER LES MESURES-----------------
     def mesure(self):
         # self.segmentation_terminee = True
         QMessageBox.information(self, "Mesures lancées", "Les mesures ont été lancées avec succès.")
@@ -416,21 +472,13 @@ class MyWindow(QMainWindow):
             QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement :\n{str(e)}")
     
     #------------------ACTION 10 : REUNITIALISER ET SAUVEGARDER-----------------
-    def reset(self,choix):
-        
-        msgBox = QMessageBox(self)
-        msgBox.setInformativeText(f"Voulez-vous sauvegarder les précédentes modifications avant de changer {choix} ?")
-        msgBox.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.StandardButton.Cancel)
-        msgBox.setDefaultButton(QMessageBox.Save)
-        ret = msgBox.exec()
+    def reset(self):
+        rep = QMessageBox.question(self, "Validation", 
+            "Voulez-vous sauvegarder les précédentes modifications ?")
 
-        match ret:
-            case QMessageBox.Save:
-                self.save()
-                self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
-
-            case QMessageBox.StandardButton.Cancel:
-                return
+        if rep == QMessageBox.Yes:
+            self.save()
+            self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
         
         # Fermer les fenêtres dock si elles existent
         if self.segmentation_window is not None:
@@ -458,6 +506,38 @@ class MyWindow(QMainWindow):
         self.actPleinEcran.setEnabled(False)
         self.lbl_import.clear()
         self._init_panels()
+        
+    def modif_couleurs(self, key: str, color_modif: tuple):
+        """Reçoit la nouvelle couleur depuis SegmentationToolbox."""
+        # Met à jour la couleur de la couche concernée (on garde l'alpha à 255)
+        r, g, b = color_modif[-3], color_modif[-2], color_modif[-1]
+        self.couleurs[key] = (r, g, b, 255)
+
+        # Recharge les masques avec les nouvelles couleurs
+        self._recharger_masques()
+
+    def _recharger_masques(self):
+        if self.path_image_courante is None:
+            return
+        
+        paths = images_paths(self.path_image_courante)
+        image_originale, mask_veins, mask_arteries, mask_od = load_images(
+            paths,
+            couleur_veines=self.couleurs["veines"],
+            couleur_arteres=self.couleurs["arteres"],
+            couleur_disque=self.couleurs["disque"],
+        )
+        
+        # ✅ Reconvertir en QPixmap et mettre à jour la scène
+        pixmap_fundus, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
+            image_originale, mask_veins, mask_arteries, mask_od
+        )
+        self.item_veins.setPixmap(pixmap_veins)
+        self.item_arteries.setPixmap(pixmap_arteries)
+        self.item_od.setPixmap(pixmap_od)
+        
+        # Rafraîchis l'opacité
+        self.segmentation_window.appliquer()
 
 
 if __name__ == "__main__":

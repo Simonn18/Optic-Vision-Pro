@@ -1,5 +1,7 @@
 import os
-from PySide6.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QGroupBox, QCheckBox, QPushButton, QHBoxLayout, QMessageBox, QScrollArea, QFrame)
+from PySide6.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QGroupBox,QCheckBox, 
+                               QPushButton, QHBoxLayout, QMessageBox, QScrollArea, 
+                               QFrame, QTreeWidget, QTreeWidgetItem,QFileDialog) 
 from PySide6.QtCore import Qt
 import read_csv as rc
 import json
@@ -102,7 +104,7 @@ class MesuresToolbox(QDockWidget):
         self.cb_veines  = QCheckBox("Veines")
         self.cb_arteres = QCheckBox("Arteres")
         self.cb_les2    = QCheckBox("Arteres + Veines")
-        layout.addWidget(self._groupe(
+        layout.addWidget(self.groupe(
             "Type de vaisseaux",
             [self.cb_veines, self.cb_arteres, self.cb_les2]
         ))
@@ -121,20 +123,19 @@ class MesuresToolbox(QDockWidget):
         btn_rien.setObjectName("btn_rien")
         btn_tout.clicked.connect(lambda: [cb.setChecked(True)  for cb in zone_cbs])
         btn_rien.clicked.connect(lambda: [cb.setChecked(False) for cb in zone_cbs])
-        btn_tout.clicked.connect(self._update_lancer_btn)
-        btn_rien.clicked.connect(self._update_lancer_btn)
+        btn_tout.clicked.connect(self.update_lancer_btn)
+        btn_rien.clicked.connect(self.update_lancer_btn)
 
-        layout.addWidget(self._groupe("Zones", zone_cbs,
+        layout.addWidget(self.groupe("Zones", zone_cbs,
                                       extra_buttons=[btn_tout, btn_rien]))
 
         # Groupes d'actions
-        self.cb_wpr        = QCheckBox("WPR")
-        self.cb_vzr        = QCheckBox("VZR")
+        self.cb_secteur       = QCheckBox("Secteurs")
         self.cb_cal_diam   = QCheckBox("Calibre + diametre")
         self.cb_topologie  = QCheckBox("Topologie")
         self.cb_tortuosite = QCheckBox("Tortuosite")
         self.cb_pts_crit   = QCheckBox("Points critiques")
-        groupes_cbs = [self.cb_wpr, self.cb_vzr, self.cb_cal_diam,
+        groupes_cbs = [self.cb_secteur, self.cb_cal_diam,
                        self.cb_topologie, self.cb_tortuosite, self.cb_pts_crit]
         btn_tout2 = QPushButton("Tout")
         btn_tout2.setObjectName("btn_tout")
@@ -142,28 +143,65 @@ class MesuresToolbox(QDockWidget):
         btn_rien2.setObjectName("btn_rien")
         btn_tout2.clicked.connect(lambda: [cb.setChecked(True)  for cb in groupes_cbs])
         btn_rien2.clicked.connect(lambda: [cb.setChecked(False) for cb in groupes_cbs])
-        btn_tout2.clicked.connect(self._update_lancer_btn)
-        btn_rien2.clicked.connect(self._update_lancer_btn)
+        btn_tout2.clicked.connect(self.update_lancer_btn)
+        btn_rien2.clicked.connect(self.update_lancer_btn)
         
-        layout.addWidget(self._groupe(
+        layout.addWidget(self.groupe(
             "Groupes d'actions",
             groupes_cbs, extra_buttons=[btn_tout2, btn_rien2]
         ))
 
         # Bouton Lancer
-        self.btn_lancer = QPushButton("Lancer les mesures")
+        self.btn_lancer = QPushButton("Afficher les mesures")
         self.btn_lancer.setObjectName("btn_lancer")
+        self.btn_export = QPushButton("Exporter les mesures ")
+        self.btn_export.setObjectName("btn_export")
+        self.btn_export.clicked.connect(self.exporter_resultats)
+        layout.addWidget(self.btn_export)
+
         self.btn_lancer.clicked.connect(self.lancer_mesures)
         layout.addWidget(self.btn_lancer)
         layout.addStretch()
 
-    def _groupe(self, titre: str, checkboxes: list,
-                extra_buttons: list = None) -> QGroupBox:
+        # --- ZONE D'AFFICHAGE DES RÉSULTATS ---
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Propriété", "Valeur"])
+        self.tree.setColumnWidth(0, 160)
+        self.tree.setMinimumHeight(250) 
+        
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                background-color: #ffffff;
+                color: #222233;            
+                border: 1px solid #c8c8d8;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QTreeWidget::item {
+                padding: 3px;
+                color: #222233;            
+            }
+            QTreeWidget::item:selected {
+                background-color: #5555cc; 
+                color: #ffffff;            
+            }
+            QHeaderView::section {
+                background-color: #e8e8f4;
+                color: #3333aa;            
+                padding: 4px;
+                font-weight: bold;
+                border: none;
+            }
+        """)
+        layout.addWidget(self.tree)
+
+    def groupe(self, titre, checkboxes,
+                extra_buttons = None) :
         box = QGroupBox(titre)
         vbox = QVBoxLayout(box)
         vbox.setSpacing(2)
         for cb in checkboxes:
-            cb.stateChanged.connect(self._update_lancer_btn)
+            cb.stateChanged.connect(self.update_lancer_btn)
             vbox.addWidget(cb)
         if extra_buttons:
             row = QHBoxLayout()
@@ -173,30 +211,30 @@ class MesuresToolbox(QDockWidget):
             vbox.addLayout(row)
         return box
 
-    def _all_checkboxes(self):
+    def all_checkboxes(self):
         return [
             self.cb_veines, self.cb_arteres, self.cb_les2,
             self.cb_zoneA, self.cb_zoneB, self.cb_zoneC, self.cb_zoneAll, self.cb_zoneOut,
-            self.cb_wpr, self.cb_vzr, self.cb_cal_diam,
+            self.cb_secteur, self.cb_cal_diam,
             self.cb_topologie, self.cb_tortuosite, self.cb_pts_crit,
         ]
 
-    def _set_enabled(self, enabled: bool):
-        for cb in self._all_checkboxes():
+    def set_enabled(self, enabled):
+        for cb in self.all_checkboxes():
             cb.setEnabled(enabled)
         if not enabled:
             self.btn_lancer.setEnabled(False)
 
-    def _update_lancer_btn(self):
-        any_checked = any(cb.isChecked() for cb in self._all_checkboxes())
+    def update_lancer_btn(self):
+        any_checked = any(cb.isChecked() for cb in self.all_checkboxes())
         self.btn_lancer.setEnabled(any_checked)
 
     def activer(self):
         """Appele quand la segmentation est validee."""
-        self._set_enabled(True)
+        self.set_enabled(True)
         self.show()
 
-    def selections(self) -> tuple:
+    def selections(self) :
         """Retourne 3 listes avec les noms exacts du JSON."""
         vaisseaux = []
         if self.cb_veines.isChecked():  vaisseaux.append("Veins")
@@ -211,8 +249,8 @@ class MesuresToolbox(QDockWidget):
         if self.cb_zoneOut.isChecked(): zones.append("Out")
 
         groupes = []
-        if self.cb_wpr.isChecked():        groupes.append("WPR")
-        if self.cb_vzr.isChecked():        groupes.append("VZR")
+        
+        if self.cb_secteur.isChecked():    groupes.append("Secteurs")
         if self.cb_cal_diam.isChecked():   groupes.append("Calibre")
         if self.cb_topologie.isChecked():  groupes.append("Topologie")
         if self.cb_tortuosite.isChecked(): groupes.append("Tortuosite")
@@ -238,7 +276,8 @@ class MesuresToolbox(QDockWidget):
             QMessageBox.information(self, "Succès","Les mesures ont été enregistées dans votre dossier")
 
             print("--- DONNÉES FILTRÉES ---")
-            self._afficher_terminal(resultat)
+            if resultat:
+                self.remplir_interface(resultat)
             
             return resultat
             
@@ -246,37 +285,61 @@ class MesuresToolbox(QDockWidget):
         except FileNotFoundError:
             QMessageBox.critical(self, "Erreur", "Le fichier data.json est introuvable dans le dossier.")
 
-#fonction temporaire en vif pour afficher sur le terminal propre : 
 
+            
+    
+        
+    def remplir_interface(self, data):
+        """Remplit le QTreeWidget avec les données filtrées."""
+        self.tree.clear()
+        
+        for organe, zones in data.items():
+            # Branche Organe (ARTERIES / VEINS)
+            item_organe = QTreeWidgetItem(self.tree, [organe.upper()])
+            
+            for zone, groupes in zones.items():
+                # Branche Zone (Zone A, B...)
+                item_zone = QTreeWidgetItem(item_organe, [f"Zone {zone}"])
+                
+                for groupe, mesures in groupes.items():
+                    # Branche Groupe (Calibre, Secteurs...)
+                    item_groupe = QTreeWidgetItem(item_zone, [groupe])
+                    
+                    if isinstance(mesures, dict):
+                        for mesure, valeur in mesures.items():
+                            # Gestion spécifique pour les sous-secteurs wpr/vzr
+                            if isinstance(valeur, dict): 
+                                item_sub = QTreeWidgetItem(item_groupe, [mesure])
+                                for sub_m, sub_v in valeur.items():
+                                    v_str = f"{sub_v}" if isinstance(sub_v, float) else str(sub_v)
+                                    QTreeWidgetItem(item_sub, [sub_m, v_str])
+                            else:
+                                v_str = f"{valeur}" if isinstance(valeur, float) else str(valeur)
+                                QTreeWidgetItem(item_groupe, [mesure, v_str])
+        
+        self.tree.expandAll()
 
-    def _afficher_terminal(self, res):
-            """Affiche les résultats dans le terminal de manière structurée (Clé = Valeur)."""
-
-            print("\n" + "═"*60)
-
-            if not res:
-                print(" ⚠️  Aucune donnée ne correspond à la sélection.")
+    def exporter_resultats(self):
+        vaisseaux, zones, groupes = self.selections()
+        
+        try:
+            with open('data.json', 'r') as f:
+                data_test = json.load(f)
+            
+            resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+            
+            if not resultat:
+                QMessageBox.warning(self, "Export impossible", "Aucune donnée à exporter. Lancez d'abord une mesure.")
                 return
 
-            for organe, zones in res.items():
-                # Titre de l'organe en gras/majuscule
-                print(f"\nORGANE : {organe.upper()}")
-                print(f"  " + "─"*30)
+            # Fenêtre de dialogue pour choisir l'emplacement
+            chemin_save, _ = QFileDialog.getSaveFileName(
+                self, "Enregistrer le rapport", "rapport_mesures.txt", "Fichiers Texte (*.txt)"
+            )
 
-                for zone, groupes in zones.items():
-                    print(f"ZONE {zone}")
+            if chemin_save:
+                rc.export_txt(resultat, chemin_save)
+                QMessageBox.information(self, "Export réussi", f"Le rapport a été enregistré ici :\n{chemin_save}")
 
-                    for groupe, mesures in groupes.items():
-                        # Affichage du nom du groupe (wpr, vzr, Calibre...)
-                        print(f"   mesures : {groupe}:")
-
-                        for cle, valeur in mesures.items():
-                            if isinstance(valeur, (float, int)):
-                                val_str = f"{valeur:.4f}"
-                            else:
-                                val_str = str(valeur)
-
-                            print(f"      • {cle.ljust(35)} = {val_str}")
-            
-            print("\n" + "═"*60 + "\n")
-        
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur Export", f"Une erreur est survenue : {str(e)}")

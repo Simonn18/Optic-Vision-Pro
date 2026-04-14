@@ -134,7 +134,7 @@ def requete(data, organe=None, zone=None, groupe=None):
     # On filtre d'abord les organes (Arteries, Veins, AV)
     for nom_organe, contenu_organe in data.items():
         # Si on ne précise pas d'organe, on les garde tous
-        # Si on précise, on ne garde que celui/ceux qui correspondent
+        # Si on précise, on ne garde que ceux qui correspondent
         if organe is None or nom_organe in organe:
             
             # On crée un dictionnaire pour cet organe dans notre résultat
@@ -157,6 +157,40 @@ def requete(data, organe=None, zone=None, groupe=None):
     return resultat
 
 
+def export_txt(data, filename="rapport_mesures.txt"):
+        
+        """Génère un rapport lisible à partir du dictionnaire de résultats."""
+
+        with open(filename, "w", encoding="utf-8") as f:
+
+            if not data:
+                f.write("Aucune donnée sélectionnée.\n")
+                return
+
+            for organe, zones in data.items():
+                f.write(f"- ORGANE : {organe.upper()}\n")
+                f.write("-" * 30 + "\n")
+                
+                for zone, groupes in zones.items():
+                    f.write(f"   - Zone {zone}\n")
+                    
+                    for groupe, mesures in groupes.items():
+                        f.write(f"     - {groupe}:\n")
+                        
+                        # On regarde chaque mesure dans le groupe
+                        for nom_mesure, valeur in mesures.items():
+                            
+                            if type(valeur) is dict:
+                                f.write(f"      - {nom_mesure} :\n")
+                                for sous_nom, sous_valeur in valeur.items():
+                                    f.write(f"          {sous_nom} : {sous_valeur}\n")
+                                    
+                            else:
+                                f.write(f"      - {nom_mesure} : {valeur}\n")
+                f.write("\n")
+            
+            f.write("="*60 + "\n")
+
 
 if __name__ == "__main__":
 
@@ -164,6 +198,4 @@ if __name__ == "__main__":
         with open('data.json', 'r') as f:
             data_test = json.load(f)
             print("Test local réussi")
-
-
 
