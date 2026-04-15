@@ -3,6 +3,8 @@ import os
 import shutil
 import cv2
 import numpy as np
+import json
+
 
 from PySide6 import QtGui
 from PySide6.QtCore import Qt, Slot
@@ -16,7 +18,7 @@ from PySide6.QtWidgets import (
 import opacite as op
 import mesures_box as mb
 import plein_ecran as pe
-import segmentation as seg
+import segmentation2 as seg
 import measurements2 as m_script
 # import superposition_imagesv3 as sp
 import read_csv as rc
@@ -249,22 +251,12 @@ class MyWindow(QMainWindow):
                     image_originale, mask_veins, mask_arteries, mask_od
                 )
                 
-                
-                
-           
-        
-                
-                
-                
-                
-
                 # Initialisation de la scène
                 self.scene.clear()
                 self.item_fundus    = self.scene.addPixmap(pixmap_fundus)
                 self.item_veins     = self.scene.addPixmap(pixmap_veins)
                 self.item_arteries  = self.scene.addPixmap(pixmap_arteries)
                 self.item_od        = self.scene.addPixmap(pixmap_od)
-
                 self.item_veins.setOpacity(0.5)
                 self.item_arteries.setOpacity(0.5)
                 self.item_od.setOpacity(0.5)
@@ -275,7 +267,6 @@ class MyWindow(QMainWindow):
                 self.vue.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
                 self.panel_active = True  
-                self.statusBar().showMessage("Image chargée avec succès. ÉTAPE 2 : Ajouter les segmentations.")
                 self.tableau_seg()
                 self.actSave.setEnabled(True)
                 self.actPleinEcran.setEnabled(True)
@@ -401,76 +392,109 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 8 : PLEIN ECRAN-----------------
     def open_plein_ecran(self):
-        if self.chemin_image is None:
-            self.statusBar().showMessage("Chargez d'abord une image.")
-            return
-        
-        # Debug: afficher l'état du composite
-        has_composite = self.image_composite is not None and hasattr(self.image_composite, 'shape')
-        print(f"Debug plein écran - image_composite type: {type(self.image_composite)}, has_shape: {has_composite}")
-        
-        if not has_composite:
-            rep = QMessageBox.question(self, "Attention", 
-                "Aucune segmentation appliquée.\nAfficher l'image originale en plein écran ?")
-            if rep != QMessageBox.Yes:
-                return
-        
         fenetre = pe.PleinEcranWindow(
-            parent=self,
-            chemin=self.chemin_image,
-            image_composite=self.image_composite if has_composite else None
-        )
+            MyWindow)
         fenetre.exec()
         
-    #----------------ACTION 9 : SAUVEGARDER-----------------
+   #Générer image avec segmentation     
+    def generer_rendu_fusionne(self):
+        """Crée une image fusionnant le fond d'œil et les calques de segmentation."""
+        if self.item_fundus is None:
+            return None
+
+        # 1. Récupérer l'image de base (fundus)
+        # On transforme le QPixmap en QImage pour manipuler les pixels
+        image_finale = self.item_fundus.pixmap().toImage().convertToFormat(QtGui.QImage.Format_ARGB32)
+        
+        painter = QPainter(image_finale)
+        # Définir le mode de composition pour que l'opacité soit respectée
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+
+        # 2. Liste des calques à superposer dans l'ordre
+        calques = [
+            (self.item_veins, "veines"),
+            (self.item_arteries, "arteres"),
+            (self.item_od, "disque")
+        ]
+
+        for item, key in calques:
+            if item and item.opacity() > 0:
+                # On récupère le pixmap du calque (qui est déjà coloré par votre fonction _recharger_masques)
+                pix = item.pixmap()
+                painter.setOpacity(item.opacity()) # On applique l'opacité choisie par l'utilisateur
+                painter.drawPixmap(0, 0, pix)
+
+        painter.end()
+        return image_finale
+    
+       #----------------ACTION 9 : SAUVEGARDER-----------------
+ 
     def save(self):
-        """Enregistre l'image originale, les segmentations et les mesures."""
+        """Enregistre l'image originale et les masques dans segmentation_masks/sous_dossiers."""
         if not self.chemin_image:
             self.statusBar().showMessage("Aucune image à enregistrer.")
             return
         
-        # Demander le nom du fichier à l'utilisateur
-        sauv_fichier, ok = QInputDialog.getText(
-            self, 
-            'Sauvegarde',
-            'Entrez le nom que vous souhaitez pour les fichiers'
-        )
-        
-        if not ok or not sauv_fichier.strip():
-            self.statusBar().showMessage("Sauvegarde annulée.")
+        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du projet :')
+        if not ok or not sauv_fichier.strip(): 
             return
         
         folder_path = self.chemin_dossier
-        if not folder_path:
-            self.statusBar().showMessage("Aucun dossier sélectionné.")
+        if not folder_path: 
             return
         
         try:
-            # 1. Enregistrer l'image originale avec le nom choisi
-            nom_image = os.path.basename(self.chemin_image)
-            extension = os.path.splitext(nom_image)[1]  # Récupère l'extension (.jpg, .png, etc)
-            chemin_copie_image = os.path.join(folder_path, f"{sauv_fichier}_original{extension}")
-            shutil.copy(self.chemin_image, chemin_copie_image)
-            print(f"Image originale sauvegardée : {chemin_copie_image}")
+            # 1. Dossier principal du projet (ex: Patient_01)
+            dossier_projet = os.path.join(folder_path, sauv_fichier)
+            
+            # 2. Dossier parent pour les masques (ex: Patient_01/segmentation_masks)
+            dossier_parent_masks = os.path.join(dossier_projet, "segmentation_masks")
 
-            # 2. Enregistrer l'image composée (numpy array) si elle existe
-            if self.image_composite is not None and isinstance(self.image_composite, np.ndarray):
-                chemin_composite = os.path.join(folder_path, f"{sauv_fichier}_segmentée.png")
-                cv2.imwrite(chemin_composite, self.image_composite)
-                print(f"Image composée sauvegardée : {chemin_composite}")
+            # 3. Liste des segmentations
+            calques = [
+                (self.item_veins, "veins"),
+                (self.item_arteries, "arteries"),
+                (self.item_od, "od")
+            ]
+
+            for item, nom in calques:
+                if item is not None:
+                    # On crée le sous-dossier DANS segmentation_masks
+                    # ex: Patient_01/segmentation_masks/Veins/
+                    sous_dossier = os.path.join(dossier_parent_masks, nom)
+                    if not os.path.exists(sous_dossier):
+                        os.makedirs(sous_dossier)
+                    
+                    # Enregistrement
+                    image_calque = item.pixmap().toImage()
+                    chemin_image = os.path.join(sous_dossier, f"{nom.lower()}.png")
+                    image_calque.save(chemin_image)
+
+            # 4. Dossier pour l'image originale
+            dossier_orig = os.path.join(dossier_projet, "fundus_images")
+            if not os.path.exists(dossier_orig):
+                os.makedirs(dossier_orig)
             
-            # 3. Enregistrer les mesures (CSV) si elles existent
-            if os.path.exists("test_mesures.csv"):
-                shutil.copy("test_mesures.csv", os.path.join(folder_path, f"{sauv_fichier}_mesures.csv"))
-                print(f"Mesures sauvegardées")
-            
-            self.statusBar().showMessage(f"Fichiers sauvegardés dans {folder_path}")
-            QMessageBox.information(self, "Succès", f"Fichiers enregistrés dans :\n{folder_path}\nNom : {sauv_fichier}")
-            
+            extension = os.path.splitext(self.chemin_image)[1]
+            shutil.copy(self.chemin_image, os.path.join(dossier_orig, f"{sauv_fichier}.{extension}"))
+
+            # 5. Rendu fusionné et Config JSON à la racine du projet
+            image_fusionnee = self.generer_rendu_fusionne()
+            if image_fusionnee:
+                image_fusionnee.save(os.path.join(dossier_projet, f"{sauv_fichier}_rendu.png"))
+
+            if self.segmentation_window:
+                data_seg = self.segmentation_window.recup_image()
+                import json
+                with open(os.path.join(dossier_projet, "config_segmentation.json"), 'w', encoding='utf-8') as f:
+                    json.dump(data_seg, f, indent=4)
+
+            self.statusBar().showMessage(f"Sauvegarde terminée dans {sauv_fichier}")
+            QMessageBox.information(self, "Succès", "Fichiers enregistrés avec succès.")
+
         except Exception as e:
-            self.statusBar().showMessage(f"Erreur lors de l'enregistrement : {str(e)}")
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement :\n{str(e)}")
-    
+            QMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
+            
     #------------------ACTION 10 : REUNITIALISER ET SAUVEGARDER-----------------
     def reset(self):
         rep = QMessageBox.question(self, "Validation", 

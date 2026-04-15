@@ -459,6 +459,8 @@ class MyWindow(QMainWindow):
         self.lbl_import.clear()
         self._init_panels()
 
+    
+        
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

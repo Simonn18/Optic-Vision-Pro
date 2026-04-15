@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
+
 BLUE   = "#2a6496"
 RED    = "#e74c3c"
 GREEN  = "#27ae60"
@@ -100,6 +101,12 @@ class SegmentationToolbox(QDockWidget):
         self.setMinimumWidth(250)
         self.setStyleSheet(self.TOOLBOX_STYLE)
 
+        self.current_colors = {
+            "veines":  BLUE,
+            "arteres": RED,
+            "disque":  GREEN
+        }
+            
         self.sliders = {}
         self.groups  = {}
 
@@ -290,25 +297,34 @@ class SegmentationToolbox(QDockWidget):
             parent.on_segmentation_appliquee(data)
 
     def modifier_couleurs(self, key: str):
-        """Ouvre un QColorDialog pour la couche `key` (veines / arteres / disque)."""
+        """Ouvre un QColorDialog et met à jour le style du bouton et du slider."""
         titre, default_qt_color = COLOR_CONFIG[key]
+        print(default_qt_color)
         choix = QColorDialog.getColor(
             QColor(default_qt_color),
             self,
             titre,
         )
+        
         if not choix.isValid():
-            return                      # annulé par l'utilisateur
+            return
 
-        couleur_hex = choix.name(QColor.HexArgb)
-        print(f"[{key}] couleur choisie : {couleur_hex}")
+        couleur_hex = choix.name(QColor.NameFormat.HexRgb) # Format #RRGGBB
+        
+        # 1. Mise à jour du bouton de couleur
+        bouton = getattr(self, f"btn_couleur_{key}")
+        bouton.setStyleSheet(f"color: {couleur_hex}; font-weight: bold;")
+
+        slider = self.sliders.get(key)
+        if slider:
+            self._style_slider(slider, couleur_hex)
+
         color_modif = self.hex_to_rgb(couleur_hex)
+        parent = self.parent()
+        if parent and hasattr(parent, "modif_couleurs"):
+            parent.modif_couleurs(key, color_modif)
 
-     
-        parent= self.parent()
-        if parent and hasattr(parent,"modif_couleurs"):
-            parent.modif_couleurs(key,color_modif)
-
+    
     def _on_editer_disque(self):
         parent = self.parent()
         if parent and hasattr(parent, "edit_disque_optique"):
@@ -335,3 +351,35 @@ class SegmentationToolbox(QDockWidget):
         lv = len(value)
         rgb = tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
         return rgb
+
+    def recup_image(self):
+        """Récupère l'état actuel depuis les items du parent (MainWindow)."""
+        parent = self.parent()
+        
+        # Sécurité si le parent n'est pas encore prêt
+        if not hasattr(parent, "item_veins") or parent.item_veins is None:
+            return {}
+
+        segmentation_state = {
+            "layers": {
+                "veines": {
+                    "opacity": parent.item_veins.opacity(),
+                    "visible": parent.item_veins.isVisible(),
+                    "color": self.current_colors.get("veines")
+                },
+                "arteres": {
+                    "opacity": parent.item_arteries.opacity(),
+                    "visible": parent.item_arteries.isVisible(),
+                    "color": self.current_colors.get("arteres")
+                },
+                "disque_optique": {
+                    "opacity": parent.item_od.opacity(),
+                    "visible": parent.item_od.isVisible(),
+                    "color": self.current_colors.get("disque")
+                }
+            },
+            "fundus": {
+                "opacity": parent.item_fundus.opacity()
+            }
+        }
+        return segmentation_state
