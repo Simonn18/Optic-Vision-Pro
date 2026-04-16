@@ -4,6 +4,7 @@ import shutil
 import cv2
 import numpy as np
 import json
+import skimage as ski
 
 
 from PySide6 import QtGui
@@ -57,6 +58,8 @@ class MyWindow(QMainWindow):
         self.toolbox = None
         self.image_composite = None
         self.path_image_courante = None 
+        self.list_paths = None
+        
 
         self.setWindowTitle("Optic Vision Pro")
         self.resize(960, 620)
@@ -230,7 +233,7 @@ class MyWindow(QMainWindow):
                 QMessageBox.warning(self, "Erreur", "Aucun dossier sélectionné.")
                 print(self.chemin_dossier)
         else:
-            self.reset()
+            self.reset("de dossier")
             self.chemin_dossier = None
         
         
@@ -239,40 +242,90 @@ class MyWindow(QMainWindow):
     def open(self):
         if self.chemin_image is None:
             chemin, _ = QFileDialog.getOpenFileName(
-                self,
-                "Choisir une image","", "Images (*.jpg)" 
+                self, "Choisir une image", "", "Images (*.jpg)"
             )
-            if chemin:  
+            if chemin:
                 self.chemin_image = chemin
                 self.path_image_courante = chemin
-                list_paths = images_paths(chemin)
-                image_originale, mask_veins, mask_arteries, mask_od = load_images(list_paths)
-                pixmap_fundus, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
+                self.list_paths = images_paths(chemin)
+
+                # Chercher un config_segmentation.json dans le même dossier fundus_images
+                dossier_fundus = os.path.dirname(chemin)
+                chemin_config = os.path.join(dossier_fundus, "config_segmentation.json")
+                config = None
+
+                if os.path.exists(chemin_config):
+                    with open(chemin_config, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                    layers = config.get("layers", {})
+
+                    def hex_to_rgba(hex_color):
+                        hex_color = hex_color.lstrip('#')
+                        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                        return (r, g, b, 255)
+
+                    if "veines" in layers:
+                        self.couleurs["veines"] = hex_to_rgba(layers["veines"]["color"])
+                    if "arteres" in layers:
+                        self.couleurs["arteres"] = hex_to_rgba(layers["arteres"]["color"])
+                    if "disque_optique" in layers:
+                        self.couleurs["disque"] = hex_to_rgba(layers["disque_optique"]["color"])
+
+                    self.statusBar().showMessage("Configuration chargée depuis config_segmentation.json")
+
+                image_originale, mask_veins, mask_arteries, mask_od = load_images(
+                    self.list_paths,
+                    couleur_veines=self.couleurs["veines"],
+                    couleur_arteres=self.couleurs["arteres"],
+                    couleur_disque=self.couleurs["disque"],
+                )
+                pixmap_fundus, self.pixmap_veins, self.pixmap_arteries, self.pixmap_od = conversion_qpixmap(
                     image_originale, mask_veins, mask_arteries, mask_od
                 )
-                
-                # Initialisation de la scène
-                self.scene.clear()
-                self.item_fundus    = self.scene.addPixmap(pixmap_fundus)
-                self.item_veins     = self.scene.addPixmap(pixmap_veins)
-                self.item_arteries  = self.scene.addPixmap(pixmap_arteries)
-                self.item_od        = self.scene.addPixmap(pixmap_od)
-                self.item_veins.setOpacity(0.5)
-                self.item_arteries.setOpacity(0.5)
-                self.item_od.setOpacity(0.5)
 
-                # Affichage
+                self.scene.clear()
+                self.item_fundus   = self.scene.addPixmap(pixmap_fundus)
+                self.item_veins    = self.scene.addPixmap(self.pixmap_veins)
+                self.item_arteries = self.scene.addPixmap(self.pixmap_arteries)
+                self.item_od       = self.scene.addPixmap(self.pixmap_od)
+
                 self.lbl_import.hide()
                 self.vue.show()
                 self.vue.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+                self.panel_active = True
 
-                self.panel_active = True  
+                # tableau_seg() crée la segmentation_window
                 self.tableau_seg()
+                
+                # ✅ Appliquer la config aux sliders APRÈS création de la toolbox
+                if config:
+                    layers = config.get("layers", {})
+                    fundus_opacity = config.get("fundus", {}).get("opacity", 0.5)
+
+                    # Convertir 0.0–1.0 → 0–100 pour les sliders
+                    self.segmentation_window.sliders["image"].setValue(int(fundus_opacity * 100))
+                    self.segmentation_window.sliders["veines"].setValue(int(layers.get("veines", {}).get("opacity", 0.5) * 100))
+                    self.segmentation_window.sliders["arteres"].setValue(int(layers.get("arteres", {}).get("opacity", 0.5) * 100))
+                    self.segmentation_window.sliders["disque"].setValue(int(layers.get("disque_optique", {}).get("opacity", 0.5) * 100))
+
+                    # ✅ Mettre à jour aussi les couleurs des boutons dans la toolbox
+                    for key, json_key in [("veines", "veines"), ("arteres", "arteres"), ("disque", "disque_optique")]:
+                        if json_key in layers:
+                            couleur_hex = layers[json_key]["color"]
+                            self.segmentation_window.current_colors[key] = couleur_hex
+                            bouton = getattr(self.segmentation_window, f"btn_couleur_{key}")
+                            bouton.setStyleSheet(f"color: {couleur_hex}; font-weight: bold;")
+                            self.segmentation_window._style_slider(self.segmentation_window.sliders[key], couleur_hex)
+                else:
+                    # Pas de config : opacités par défaut à 50
+                    self.segmentation_window.sliders["veines"].setValue(50)
+                    self.segmentation_window.sliders["arteres"].setValue(50)
+                    self.segmentation_window.sliders["disque"].setValue(50)
+
                 self.actSave.setEnabled(True)
                 self.actPleinEcran.setEnabled(True)
         else:
-            
-            self.reset()
+            self.reset("d'image")
             
             
     #------------------ACTION 2 : AFFICHER/SUPPRIMER LES SEGMENTATIONS-----------------
@@ -430,80 +483,115 @@ class MyWindow(QMainWindow):
        #----------------ACTION 9 : SAUVEGARDER-----------------
  
     def save(self):
-        """Enregistre l'image originale et les masques dans segmentation_masks/sous_dossiers."""
         if not self.chemin_image:
             self.statusBar().showMessage("Aucune image à enregistrer.")
             return
-        
-        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du projet :')
+
+        # 1. Vérifier si on est déjà dans un dossier de projet (existence du config_segmentation.json)
+        # On utilise self.path_image_courante pour localiser le dossier actuel
+        dossier_actuel_fundus = os.path.dirname(self.path_image_courante)
+        chemin_config_existant = os.path.join(dossier_actuel_fundus, "config_segmentation.json")
+
+        if os.path.exists(chemin_config_existant):
+            msgBox = QMessageBox(self)
+            msgBox.setWindowTitle("Sauvegarde")
+            msgBox.setText("Un fichier de configuration existe déjà.")
+            msgBox.setInformativeText("Voulez-vous simplement mettre à jour les réglages actuels ou créer un nouveau projet ?")
+            
+            btn_maj = msgBox.addButton("Mettre à jour", QMessageBox.ActionRole)
+            btn_nouveau = msgBox.addButton("Nouveau projet", QMessageBox.ActionRole)
+            msgBox.addButton(QMessageBox.Cancel)
+            
+            msgBox.exec()
+
+            # CAS A : Mise à jour simple du JSON dans le dossier actuel
+            if msgBox.clickedButton() == btn_maj:
+                if self.segmentation_window:
+                    data_seg = self.segmentation_window.recup_image()
+                    with open(chemin_config_existant, 'w', encoding='utf-8') as f:
+                        json.dump(data_seg, f, indent=4)
+                    self.statusBar().showMessage("Réglages mis à jour avec succès.")
+                    return
+                
+            # Si Annuler
+            elif msgBox.standardButton(msgBox.clickedButton()) == QMessageBox.Cancel:
+                return
+            
+            # Si "Nouveau projet", on continue la fonction normalement...
+
+        # 2. Création d'un nouveau projet (Demander le nom)
+        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du nouveau projet :')
         if not ok or not sauv_fichier.strip(): 
             return
         
-        folder_path = self.chemin_dossier
-        if not folder_path: 
+        if not self.chemin_dossier:
+            QMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
             return
-        
-        try:
-            # 1. Dossier principal du projet (ex: Patient_01)
-            dossier_projet = os.path.join(folder_path, sauv_fichier)
-            
-            # 2. Dossier parent pour les masques (ex: Patient_01/segmentation_masks)
-            dossier_parent_masks = os.path.join(dossier_projet, "segmentation_masks")
 
-            # 3. Liste des segmentations
+        try:
+            # Définition des chemins
+            dossier_projet = os.path.join(self.chemin_dossier, sauv_fichier)
+            dossier_parent_masks = os.path.join(dossier_projet, "segmentation_masks")
+            dossier_orig = os.path.join(dossier_projet, "fundus_images")
+
+            # Création de l'arborescence
+            os.makedirs(dossier_orig, exist_ok=True)
+
+            # 3. Sauvegarde des masques avec binarisation (pour éviter le noir)
+            paths = images_paths(self.path_image_courante)
             calques = [
-                (self.item_veins, "veins"),
-                (self.item_arteries, "arteries"),
-                (self.item_od, "od")
+                (paths[1], "veins"),
+                (paths[2], "arteries"),
+                (paths[3], "od"),
             ]
 
-            for item, nom in calques:
-                if item is not None:
-                    # On crée le sous-dossier DANS segmentation_masks
-                    # ex: Patient_01/segmentation_masks/Veins/
-                    sous_dossier = os.path.join(dossier_parent_masks, nom)
-                    if not os.path.exists(sous_dossier):
-                        os.makedirs(sous_dossier)
-                    
-                    # Enregistrement
-                    image_calque = item.pixmap().toImage()
-                    chemin_image = os.path.join(sous_dossier, f"{nom.lower()}.png")
-                    image_calque.save(chemin_image)
+            for chemin_mask, nom in calques:
+                if os.path.exists(chemin_mask):
+                    mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
+                    if mask_brut is not None:
+                        # Rendre les segments bien blancs (255)
+                        _, mask_binarise = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
+                        
+                        sous_dossier = os.path.join(dossier_parent_masks, nom)
+                        os.makedirs(sous_dossier, exist_ok=True)
+                        cv2.imwrite(os.path.join(sous_dossier, f"{sauv_fichier}.png"), mask_binarise)
 
-            # 4. Dossier pour l'image originale
-            dossier_orig = os.path.join(dossier_projet, "fundus_images")
-            if not os.path.exists(dossier_orig):
-                os.makedirs(dossier_orig)
-            
+            # 4. Image originale et Rendu fusionné
             extension = os.path.splitext(self.chemin_image)[1]
-            shutil.copy(self.chemin_image, os.path.join(dossier_orig, f"{sauv_fichier}.{extension}"))
+            shutil.copy(self.chemin_image, os.path.join(dossier_orig, f"{sauv_fichier}{extension}"))
 
-            # 5. Rendu fusionné et Config JSON à la racine du projet
             image_fusionnee = self.generer_rendu_fusionne()
             if image_fusionnee:
-                image_fusionnee.save(os.path.join(dossier_projet, f"{sauv_fichier}_rendu.png"))
+                image_fusionnee.save(os.path.join(dossier_orig, f"{sauv_fichier}_rendu.png"))
 
+            # 5. Config JSON
             if self.segmentation_window:
                 data_seg = self.segmentation_window.recup_image()
-                import json
-                with open(os.path.join(dossier_projet, "config_segmentation.json"), 'w', encoding='utf-8') as f:
+                with open(os.path.join(dossier_orig, "config_segmentation.json"), 'w', encoding='utf-8') as f:
                     json.dump(data_seg, f, indent=4)
 
-            self.statusBar().showMessage(f"Sauvegarde terminée dans {sauv_fichier}")
-            QMessageBox.information(self, "Succès", "Fichiers enregistrés avec succès.")
+            self.statusBar().showMessage(f"Projet {sauv_fichier} enregistré.")
+            QMessageBox.information(self, "Succès", "Nouveau projet créé avec succès.")
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
             
     #------------------ACTION 10 : REUNITIALISER ET SAUVEGARDER-----------------
-    def reset(self):
-        rep = QMessageBox.question(self, "Validation", 
-            "Voulez-vous sauvegarder les précédentes modifications ?")
+    def reset(self,choix):
+        msgBox = QMessageBox(self)
+        msgBox.setInformativeText(f"Voulez-vous sauvegarder les précédentes modifications avant de changer {choix} ?")
+        msgBox.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.StandardButton.Cancel)
+        msgBox.setDefaultButton(QMessageBox.Save)
+        ret = msgBox.exec()
 
-        if rep == QMessageBox.Yes:
-            self.save()
-            self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
-        
+        match ret:
+            case QMessageBox.Save:
+                self.save()
+                self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
+
+            case QMessageBox.StandardButton.Cancel:
+                return
+            
         # Fermer les fenêtres dock si elles existent
         if self.segmentation_window is not None:
             self.segmentation_window.close()
