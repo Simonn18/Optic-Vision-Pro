@@ -25,7 +25,7 @@ import measurements2 as m_script
 import read_csv as rc
 from chargement_images import load_images, images_paths
 from affichage_images import conversion_qpixmap
-
+from Editer_Disque import mouse, dragging, EndPos, CurPos
 
 CARD  = "#000000"
 BG    = "#f0f0f0"
@@ -367,7 +367,33 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 4 : EDITER LE DISQUE OPTIQUE-----------------
     def edit_disque_optique(self):
-        print("renvoie au parent")
+        h, w = self.shape[:2]
+
+        mask = np.any(self != [0, 0, 0], axis=-1).astype(np.uint8) * 255
+
+        shape = cv2.bitwise_and(self, self, mask=mask)
+
+        background = self.copy()
+        background[mask > 0] = 0
+
+        cv2.namedWindow("Image")
+        cv2.setMouseCallback("Image", mouse)
+
+        while True :
+            temp=background.copy()
+
+            M = np.float32([[1, 0, EndPos[0]], [0, 1, EndPos[1]]])
+
+            shifted_shape = cv2.warpAffine(shape, M, (w, h))
+            shifted_mask = cv2.warpAffine(mask, M, (w, h))
+
+            temp[shifted_mask > 0] = shifted_shape[shifted_mask > 0]
+            cv2.imshow("Image", temp)
+            if cv2.waitKey(1) == 13 : #13ENTER 27ESC
+                cv2.imwrite("result.png", temp)
+                break
+            
+        cv2.destroyAllWindows()
          
     # #------------------ACTION 5 : VALIDER LE DISQUE OPTIQUE-----------------
     # def valider_disque_optique(self):
