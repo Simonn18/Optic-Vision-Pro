@@ -559,6 +559,7 @@ class MyWindow(QMainWindow):
             dossier_projet = os.path.join(self.chemin_dossier, sauv_fichier)
             dossier_parent_masks = os.path.join(dossier_projet, "segmentation_masks")
             dossier_orig = os.path.join(dossier_projet, "fundus_images")
+            dossier_results = os.path.join(dossier_projet, "results")
 
             # Création de l'arborescence
             os.makedirs(dossier_orig, exist_ok=True)
@@ -595,6 +596,24 @@ class MyWindow(QMainWindow):
                 data_seg = self.segmentation_window.recup_image()
                 with open(os.path.join(dossier_orig, "config_segmentation.json"), 'w', encoding='utf-8') as f:
                     json.dump(data_seg, f, indent=4)
+
+
+
+            #sauvegarde CSV et JSON pour mesures
+            os.makedirs(dossier_results, exist_ok=True)
+
+            fichiers = [
+                            ("test_mesures.csv", f"{sauv_fichier}_mesures.csv"),
+                            ("data.json", f"{sauv_fichier}_data.json")
+                        ]
+
+            for src, destination in fichiers:
+                if os.path.exists(src):
+                    shutil.copy(src, os.path.join(dossier_results, destination))
+                    print(f"Fichier {src} copié dans le dossier results.")
+                else:
+                    print(f"Note : {src} n'existe pas encore (mesures non lancées).")
+
 
             self.statusBar().showMessage(f"Projet {sauv_fichier} enregistré.")
             QMessageBox.information(self, "Succès", "Nouveau projet créé avec succès.")
