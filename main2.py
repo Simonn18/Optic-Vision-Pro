@@ -32,6 +32,7 @@ from Editer_Disque import mouse, dragging, EndPos, CurPos
 
 CARD  = "#000000"
 BG    = "#f0f0f0"
+GRAY = "#666666"
 
 
 #_______________________________
@@ -69,6 +70,7 @@ class MyWindow(QMainWindow):
         self._init_actions()
         self._create_menus()
         self._init_panels()
+        self.init_buttons()
 
         self.couleurs = {
             "veines":  (0,   0,   255, 255),
@@ -88,17 +90,153 @@ class MyWindow(QMainWindow):
         self.bg.setStyleSheet(f"background-color: {BG};")
         self.setCentralWidget(self.bg)
 
-        main_layout = QVBoxLayout(self.bg)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        self.main_layout = QVBoxLayout(self.bg)
+        self.main_layout.setContentsMargins(20, 20, 20, 20)
 
         self.panel_centre = make_panel(self.bg)
-        panel_layout = QVBoxLayout(self.panel_centre)
+        self.panel_layout = QVBoxLayout(self.panel_centre)
 
-        # Remplacement du QLabel par une QGraphicsView
         self.scene = QGraphicsScene()
         self.vue = QGraphicsView(self.scene)
         self.vue.setStyleSheet("background: transparent; border: none;")
 
+        self.item_fundus   = None
+        self.item_veins    = None
+        self.item_arteries = None
+        self.item_od       = None
+
+        self.panel_layout.addWidget(self.vue)
+        self.vue.hide()
+        self.main_layout.addWidget(self.panel_centre)
+
+        # ✅ Désactiver le chargement tant que l'utilisateur n'a pas choisi un mode
+        self.actOpen.setEnabled(False)
+        self.charger_dossier.setEnabled(False)
+
+        
+    # ──────────────────────────────────────────────
+    # Actions
+    # ──────────────────────────────────────────────
+
+    def _retour(self):
+        messageBox = QMessageBox(self)
+        messageBox.setWindowTitle("Retour au menu principal")
+        messageBox.setText("Voulez-vous retourner au menu principal ?")
+            
+        btn_QAS = messageBox.addButton("Quitter et sauvegarder", QMessageBox.ActionRole)
+        btn_QSS = messageBox.addButton("Quitter sans sauvegarder", QMessageBox.ActionRole)
+        messageBox.addButton(QMessageBox.Cancel)
+        
+        messageBox.exec()
+
+        
+        if messageBox.clickedButton() == btn_QAS:
+            self.save()
+                
+        elif messageBox.standardButton(messageBox.clickedButton()) == QMessageBox.Cancel:
+            return
+        
+        self.chemin_image          = None
+        self.chemin_veines         = None
+        self.chemin_arteres        = None
+        self.chemin_disque         = None
+        self.path_image_courante   = None   
+        self.list_paths            = None   
+        self.panel_active          = False
+        self.affichage_double      = None
+        self.od_valide             = False
+        self.segmentation_terminee = False
+
+        self.item_fundus    = None          
+        self.item_veins     = None         
+        self.item_arteries  = None          
+        self.item_od        = None          
+
+        self.couleurs = {                   
+            "veines":  (0,   0,   255, 255),
+            "arteres": (255, 0,   100, 255),
+            "disque":  (0,   255, 0,   255),
+        }
+
+        self._init_panels()
+        if self.segmentation_window is not None:
+            self.segmentation_window.close()
+            self.segmentation_window = None
+        
+        if self.toolbox is not None:
+            self.toolbox.close()
+            self.toolbox = None
+        self.init_buttons()
+    
+    def make_button(self, label, parent, bcolor="#ffffff", police="Arial", radius=12, color="white", hover_color="#666666"):
+        text = QPushButton(label, parent)
+        text.setFixedSize(200, 50)  # ✅ taille fixe
+        text.setStyleSheet(f"""
+            QPushButton {{
+                font-family: {police};
+                font-size: 13px;
+                font-weight: bold;
+                text-align: center;
+                border-radius: {radius}px;
+                background-color: {bcolor};
+                color: #000000;
+                padding: 10px 20px;
+            }}
+            QPushButton:hover {{
+                background-color: {hover_color};
+                color : {color};
+            }}
+            QPushButton:pressed {{
+                background-color: #555555;
+            }}
+        """)
+        return text
+
+    def init_buttons(self):
+        """Affichés au lancement, cachés quand une image est chargée."""
+        self.btn_container = QWidget(self.panel_centre)
+        container_layout = QVBoxLayout(self.btn_container)  # ✅ vertical : logo au-dessus, boutons en dessous
+        container_layout.setContentsMargins(40, 40, 40, 40)
+        container_layout.setSpacing(20)
+        container_layout.setAlignment(Qt.AlignCenter)
+
+        # Logo au-dessus
+        ecran = QApplication.primaryScreen().availableGeometry()
+        largeur = ecran.width()
+        hauteur = ecran.height()
+        self.logo = QLabel(self.btn_container)
+        logo_pixmap = QPixmap("OVP4.pdf")
+        logo_pixmap = logo_pixmap.scaled(hauteur//2, largeur//2 , Qt.KeepAspectRatio, Qt.SmoothTransformation)  # ✅
+        self.logo.setPixmap(logo_pixmap)
+        self.logo.setAlignment(Qt.AlignCenter)
+      
+
+        # Boutons côte à côte en dessous
+        btn_row = QWidget(self.btn_container)
+        btn_layout = QHBoxLayout(btn_row)
+        btn_layout.setSpacing(20)
+        btn_layout.setAlignment(Qt.AlignCenter)
+
+        self.pretraitement = self.make_button("PRÉ-TRAITEMENT", btn_row, radius=25)
+        self.traitement    = self.make_button("TRAITEMENT D'IMAGE", btn_row, radius=25)
+        self.traitement.clicked.connect(self._on_traitement_clicked)
+
+        btn_layout.addWidget(self.pretraitement)
+        btn_layout.addWidget(self.traitement)
+
+        # Assemblage vertical
+        container_layout.addWidget(self.logo)
+        container_layout.addWidget(btn_row)
+
+        self.panel_layout.addWidget(self.btn_container)
+
+    def _on_traitement_clicked(self):
+        """Cache les boutons d'accueil, affiche le panel image et active le chargement."""
+        
+        # 1. Cacher les boutons d'accueil
+        self.btn_container.hide()
+
+        # 2. Afficher le label d'import
         self.lbl_import = QLabel(
             "CHARGER OU CREER UN DOSSIER\nET RECHERCHER UN FICHIER\nSUR L'ORDINATEUR",
             self.panel_centre,
@@ -106,23 +244,18 @@ class MyWindow(QMainWindow):
         self.lbl_import.setAlignment(Qt.AlignCenter)
         self.lbl_import.setWordWrap(True)
         self.lbl_import.setStyleSheet(
-            "color: #F7F2FF; font-size: 18px; background: transparent, bold;"
+            "color: #F7F2FF; font-size: 18px; background: transparent;"
         )
+        self.panel_layout.addWidget(self.lbl_import)
 
-        # Calques de la scène (None tant qu'aucune image n'est chargée)
-        self.item_fundus    = None
-        self.item_veins     = None
-        self.item_arteries  = None
-        self.item_od        = None
+        # 3. Activer les boutons de chargement dans le menu
+        self.charger_dossier.setEnabled(True)
+        self.actOpen.setEnabled(True)
 
-        panel_layout.addWidget(self.lbl_import)
-        panel_layout.addWidget(self.vue)
-        self.vue.hide()  # cachée jusqu'au chargement d'une image
-        main_layout.addWidget(self.panel_centre)
- 
-    # ──────────────────────────────────────────────
-    # Actions
-    # ──────────────────────────────────────────────
+        self.statusBar().showMessage("ETAPE 1 : Charger ou créer un dossier de travail.")
+        
+   
+          
 
     def _init_actions(self):
         style = self.style()
@@ -143,6 +276,11 @@ class MyWindow(QMainWindow):
         self.actSave.setStatusTip("Enregistrer le fichier")
         self.actSave.setEnabled(False)
         self.actSave.triggered.connect(self.save)
+        
+        self.retour = QAction("&Retour menu")
+        self.retour.setShortcut("Ctrl+R")
+        self.actSave.setStatusTip("retour au menu principal")
+        self.retour.triggered.connect(self._retour)
 
         self.actOpacite = QAction("&Opacite", self)
         self.actOpacite.setShortcut("Ctrl+T")
@@ -196,6 +334,7 @@ class MyWindow(QMainWindow):
         m_fichier.addAction(self.actOpen)
         m_fichier.addSeparator()
         m_fichier.addAction(self.actSave)
+        m_fichier.addAction(self.retour)
         
         # m_outils = mb.addMenu("&Outils")
         # m_outils.addAction(self.actEditerDisque)
@@ -220,7 +359,7 @@ class MyWindow(QMainWindow):
     #__________________________________________
     #FONCTION APPELEE PAR LES ACTIONS
     #__________________________________________
-
+ 
 
     #-----------------ACTION 0 : CRÉER REPERTOIRE DE TRAVAIL------
                 
@@ -301,6 +440,7 @@ class MyWindow(QMainWindow):
                 self.tableau_seg()
                 
                 if config:
+                    
                     layers = config.get("layers", {})
                     fundus_opacity = config.get("fundus", {}).get("opacity", 0.5)
 
@@ -500,7 +640,6 @@ class MyWindow(QMainWindow):
 
         for item, key in calques:
             if item and item.opacity() > 0:
-                # On récupère le pixmap du calque (qui est déjà coloré par votre fonction _recharger_masques)
                 pix = item.pixmap()
                 painter.setOpacity(item.opacity()) # On applique l'opacité choisie par l'utilisateur
                 painter.drawPixmap(0, 0, pix)
@@ -638,9 +777,9 @@ class MyWindow(QMainWindow):
                 self.save()
                 self.statusBar().showMessage("Sauvegarde effectuée.")
             case QMessageBox.Discard:
-                pass  
+                pass  # ✅ On continue le reset sans sauvegarder
             case QMessageBox.StandardButton.Cancel:
-                return  
+                return  # ✅ On annule tout, on ne touche à rien
 
         # Fermer les fenêtres dock si elles existent
         if self.segmentation_window is not None:
@@ -651,26 +790,23 @@ class MyWindow(QMainWindow):
             self.toolbox.close()
             self.toolbox = None
 
-        # ✅ Réinitialiser TOUS les chemins
         self.chemin_image          = None
         self.chemin_veines         = None
         self.chemin_arteres        = None
         self.chemin_disque         = None
-        self.path_image_courante   = None   # ← manquait
-        self.list_paths            = None   # ← manquait
+        self.path_image_courante   = None   
+        self.list_paths            = None   
         self.panel_active          = False
         self.affichage_double      = None
         self.od_valide             = False
         self.segmentation_terminee = False
 
-        # ✅ Réinitialiser les items de scène
-        self.item_fundus    = None          # ← manquait
-        self.item_veins     = None          # ← manquait
-        self.item_arteries  = None          # ← manquait
-        self.item_od        = None          # ← manquait
+        self.item_fundus    = None          
+        self.item_veins     = None         
+        self.item_arteries  = None          
+        self.item_od        = None          
 
-        # ✅ Réinitialiser les couleurs par défaut
-        self.couleurs = {                   # ← manquait
+        self.couleurs = {                   
             "veines":  (0,   0,   255, 255),
             "arteres": (255, 0,   100, 255),
             "disque":  (0,   255, 0,   255),
@@ -686,6 +822,8 @@ class MyWindow(QMainWindow):
 
         self.statusBar().showMessage("ETAPE 1 : Telecharger une image de fond d'oeil.")
         self._init_panels()  # ← recrée scene, vue, lbl_import
+        self._on_traitement_clicked()
+
         
     def modif_couleurs(self, key: str, color_modif: tuple):
         """Reçoit la nouvelle couleur depuis SegmentationToolbox."""
@@ -708,7 +846,6 @@ class MyWindow(QMainWindow):
             couleur_disque=self.couleurs["disque"],
         )
         
-        # ✅ Reconvertir en QPixmap et mettre à jour la scène
         pixmap_fundus, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
             image_originale, mask_veins, mask_arteries, mask_od
         )
