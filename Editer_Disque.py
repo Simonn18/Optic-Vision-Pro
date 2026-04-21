@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 dragging = False
-EndPos = (0, 0)
+EndPos = [0, 0]
 CurPos = [0, 0]
 
 def mouse(event, px, py, flags, param):
@@ -26,32 +26,3 @@ def mouse(event, px, py, flags, param):
 
         CurPos[0] = EndPos[0]
         CurPos[1] = EndPos[1]
-
-def disque(img):
-    h, w = img.shape[:2]
-
-    mask = np.any(img != [0, 0, 0], axis=-1).astype(np.uint8) * 255
-
-    shape = cv2.bitwise_and(img, img, mask=mask)
-
-    background = img.copy()
-    background[mask > 0] = 0
-
-    cv2.namedWindow("Image")
-    cv2.setMouseCallback("Image", mouse)
-
-    while True :
-        temp=background.copy()
-
-        M = np.float32([[1, 0, EndPos[0]], [0, 1, EndPos[1]]])
-
-        shifted_shape = cv2.warpAffine(shape, M, (w, h))
-        shifted_mask = cv2.warpAffine(mask, M, (w, h))
-
-        temp[shifted_mask > 0] = shifted_shape[shifted_mask > 0]
-        cv2.imshow("Image", temp)
-        if cv2.waitKey(1) == 13 : #13ENTER 27ESC
-            cv2.imwrite("result.png", temp)
-            break
-        
-    cv2.destroyAllWindows()

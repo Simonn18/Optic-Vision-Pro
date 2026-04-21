@@ -65,6 +65,8 @@ def load_images(list_paths,
     image_originale = np.transpose(image_originale, (2, 0, 1))
 
     mask_veins_raw = ski.io.imread(list_paths[1])
+    if mask_veins_raw.ndim == 3:          # si RGB ou RGBA
+        mask_veins_raw = mask_veins_raw.max(axis=2)
     h, w = mask_veins_raw.shape
 
     # Veines — couleur paramétrable
@@ -77,6 +79,8 @@ def load_images(list_paths,
 
     # Artères — couleur paramétrable
     mask_arteries_raw = ski.io.imread(list_paths[2])
+    if mask_arteries_raw.ndim == 3:
+        mask_arteries_raw = mask_arteries_raw.max(axis=2)
     mask_temp = np.zeros((h, w, 4), dtype=np.uint8)
     for y in range(h):
         for x in range(w):
@@ -89,6 +93,8 @@ def load_images(list_paths,
 
     # Disque optique — couleur paramétrable
     mask_od_raw = ski.io.imread(list_paths[3])
+    if mask_od_raw.ndim == 3:
+        mask_od_raw = mask_od_raw.max(axis=2)
     mask_temp = np.zeros((h, w, 4), dtype=np.uint8)
     for y in range(h):
         for x in range(w):

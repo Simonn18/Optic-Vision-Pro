@@ -1,0 +1,496 @@
+{
+    "Arteries": {
+        "A": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 6.0,
+                    "N": 11.0,
+                    "E": 3.0,
+                    "S": 5.0,
+                    "W": 3.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_A_Arteries": 4.713497231897959,
+                "sdCaliberFC_A_Arteries": 1.9773078367593706,
+                "meanBigXCaliberFC_A_Arteries": 4.713497231897959,
+                "sdBigXCaliberFC_A_Arteries": 1.9773078367593706,
+                "nbXFC_A_Arteries": 3.0,
+                "meanCaliberFull_A_Arteries": 6.817647861294109,
+                "sdCaliberFull_A_Arteries": 3.5781519914839834,
+                "meanBigXCaliberFull_A_Arteries": 8.167974926169924,
+                "sdBigXCaliberFull_A_Arteries": 3.0153852195347097,
+                "nbXFull_A_Arteries": 6.0
+            },
+            "Topologie": {
+                "fractalDim_A_Arteries": 0.9664297483496164,
+                "nbCC_A_Arteries": 8.0,
+                "area_A_Arteries": 3041.0,
+                "areaSkeleton_A_Arteries": 468.0
+            },
+            "Points_critiques": {
+                "nbEndP_A_Arteries": 17.0,
+                "nbCrossP_A_Arteries": 1.0
+            },
+            "Tortuosite": {}
+        },
+        "B": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 4.0,
+                    "N": 11.0,
+                    "E": 1.0,
+                    "S": 4.0,
+                    "W": 3.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_B_Arteries": 5.016989773511512,
+                "sdCaliberFC_B_Arteries": 1.2812646945238169,
+                "meanBigXCaliberFC_B_Arteries": 5.016989773511512,
+                "sdBigXCaliberFC_B_Arteries": 1.2812646945238169,
+                "nbXFC_B_Arteries": 6.0,
+                "meanCaliberFull_B_Arteries": 5.5564271902057865,
+                "sdCaliberFull_B_Arteries": 2.7842301557806874,
+                "meanBigXCaliberFull_B_Arteries": 6.31583172190675,
+                "sdBigXCaliberFull_B_Arteries": 2.237646186146487,
+                "nbXFull_B_Arteries": 6.0
+            },
+            "Topologie": {
+                "fractalDim_B_Arteries": 1.0137450511073023,
+                "nbCC_B_Arteries": 7.0,
+                "area_B_Arteries": 4062.0,
+                "areaSkeleton_B_Arteries": 563.0
+            },
+            "Points_critiques": {
+                "nbEndP_B_Arteries": 14.0,
+                "nbCrossP_B_Arteries": 2.0
+            },
+            "Tortuosite": {}
+        },
+        "C": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 4.0,
+                    "N": 5.0,
+                    "E": 1.0,
+                    "S": 6.0,
+                    "W": 4.0
+                },
+                "vzr": {
+                    "T": 92.0,
+                    "N": 70.0,
+                    "E": 56.0,
+                    "S": 69.0,
+                    "W": 76.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_C_Arteries": 4.842248539125734,
+                "sdCaliberFC_C_Arteries": 1.2768659422665578,
+                "meanBigXCaliberFC_C_Arteries": 4.842248539125734,
+                "sdBigXCaliberFC_C_Arteries": 1.2768659422665578,
+                "nbXFC_C_Arteries": 6.0,
+                "meanCaliberFull_C_Arteries": 8.037872126808757,
+                "sdCaliberFull_C_Arteries": 9.08903553498504,
+                "meanBigXCaliberFull_C_Arteries": 10.658922552360423,
+                "sdBigXCaliberFull_C_Arteries": 10.07714328276789,
+                "nbXFull_C_Arteries": 6.0
+            },
+            "Topologie": {
+                "fractalDim_C_Arteries": 1.2652768610376426,
+                "nbCC_C_Arteries": 9.0,
+                "area_C_Arteries": 13402.0,
+                "areaSkeleton_C_Arteries": 1912.0
+            },
+            "Points_critiques": {
+                "nbEndP_C_Arteries": 25.0,
+                "nbCrossP_C_Arteries": 9.0
+            },
+            "Tortuosite": {}
+        },
+        "Out": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 4.0,
+                    "N": 4.0,
+                    "E": 4.0,
+                    "S": 4.0,
+                    "W": 4.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_Out_Arteries": 3.8759809568949772,
+                "sdCaliberFC_Out_Arteries": 2.4376340165915984,
+                "meanBigXCaliberFC_Out_Arteries": 5.792351993690254,
+                "sdBigXCaliberFC_Out_Arteries": 1.5888830962168912,
+                "nbXFC_Out_Arteries": 6.0,
+                "meanCaliberFull_Out_Arteries": 3.6658326326358743,
+                "sdCaliberFull_Out_Arteries": 1.8533289422145305,
+                "meanBigXCaliberFull_Out_Arteries": 4.554304504509367,
+                "sdBigXCaliberFull_Out_Arteries": 1.6648572826916839,
+                "nbXFull_Out_Arteries": 6.0
+            },
+            "Topologie": {
+                "fractalDim_Out_Arteries": 1.4080696896751044,
+                "nbCC_Out_Arteries": 9.0,
+                "area_Out_Arteries": 23528.0,
+                "areaSkeleton_Out_Arteries": 4079.0
+            },
+            "Points_critiques": {
+                "nbEndP_Out_Arteries": 48.0,
+                "nbCrossP_Out_Arteries": 36.0
+            },
+            "Tortuosite": {}
+        },
+        "All": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 4.0,
+                    "N": 4.0,
+                    "E": 4.0,
+                    "S": 4.0,
+                    "W": 4.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_All_Arteries": 4.266250927219721,
+                "sdCaliberFC_All_Arteries": 1.6799183029325697,
+                "meanBigXCaliberFC_All_Arteries": 4.266250927219721,
+                "sdBigXCaliberFC_All_Arteries": 1.6799183029325697,
+                "nbXFC_All_Arteries": 3.0,
+                "meanCaliberFull_All_Arteries": 5.355364986396205,
+                "sdCaliberFull_All_Arteries": 1.3332781081547984,
+                "meanBigXCaliberFull_All_Arteries": 5.9720181800598064,
+                "sdBigXCaliberFull_All_Arteries": 0.8296437928077149,
+                "nbXFull_All_Arteries": 6.0
+            },
+            "Topologie": {
+                "fractalDim_All_Arteries": 1.4967382350670908,
+                "nbCC_All_Arteries": 8.0,
+                "area_All_Arteries": 39971.0,
+                "areaSkeleton_All_Arteries": 6459.0,
+                "maxDepth_All_Arteries": 4.0,
+                "residualState_All_Arteries": "completed"
+            },
+            "Points_critiques": {
+                "nbEndP_All_Arteries": 57.0,
+                "nbCrossP_All_Arteries": 46.0
+            },
+            "Tortuosite": {
+                "meanSiTort_All_Arteries": 1.0037730410197976,
+                "sdSiTort_All_Arteries": 0.021083099614241246,
+                "maxSiTort_All_Arteries": 1.25,
+                "meanCuTort_All_Arteries": 0.26044841128640156,
+                "sdCuTort_All_Arteries": 0.21678269315121146,
+                "maxCuTort_All_Arteries": 0.7071067811865474
+            }
+        }
+    },
+    "Veins": {
+        "A": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 10.0,
+                    "N": 19.0,
+                    "E": 8.0,
+                    "S": 13.0,
+                    "W": 0.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_A_Veins": 2.4082633053221287,
+                "sdCaliberFC_A_Veins": 0.6808890906641373,
+                "meanBigXCaliberFC_A_Veins": 2.4082633053221287,
+                "sdBigXCaliberFC_A_Veins": 0.6808890906641373,
+                "nbXFC_A_Veins": 3.0,
+                "meanCaliberFull_A_Veins": 7.436458404748845,
+                "sdCaliberFull_A_Veins": 3.1310547466568224,
+                "meanBigXCaliberFull_A_Veins": 7.436458404748845,
+                "sdBigXCaliberFull_A_Veins": 3.131054746656822,
+                "nbXFull_A_Veins": 6.0
+            },
+            "Topologie": {
+                "fractalDim_A_Veins": 0.9979002762981686,
+                "nbCC_A_Veins": 6.0,
+                "area_A_Veins": 5412.0,
+                "areaSkeleton_A_Veins": 652.0
+            },
+            "Points_critiques": {
+                "nbEndP_A_Veins": 17.0,
+                "nbCrossP_A_Veins": 6.0
+            },
+            "Tortuosite": {}
+        },
+        "B": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 5.0,
+                    "N": 11.0,
+                    "E": 2.0,
+                    "S": 7.0,
+                    "W": 2.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_B_Veins": 7.921227091785068,
+                "sdCaliberFC_B_Veins": 4.03201504277619,
+                "meanBigXCaliberFC_B_Veins": 9.44810955233178,
+                "sdBigXCaliberFC_B_Veins": 3.2441653914501947,
+                "nbXFC_B_Veins": 6.0,
+                "meanCaliberFull_B_Veins": 63.27811300042083,
+                "sdCaliberFull_B_Veins": 143.7874423109,
+                "meanBigXCaliberFull_B_Veins": 83.37163218751179,
+                "sdBigXCaliberFull_B_Veins": 161.0853589939551,
+                "nbXFull_B_Veins": 6.0
+            },
+            "Topologie": {
+                "fractalDim_B_Veins": 1.003266500021367,
+                "nbCC_B_Veins": 8.0,
+                "area_B_Veins": 4953.0,
+                "areaSkeleton_B_Veins": 477.0
+            },
+            "Points_critiques": {
+                "nbEndP_B_Veins": 17.0,
+                "nbCrossP_B_Veins": 1.0
+            },
+            "Tortuosite": {}
+        },
+        "C": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 5.0,
+                    "N": 9.0,
+                    "E": 1.0,
+                    "S": 7.0,
+                    "W": 2.0
+                },
+                "vzr": {
+                    "T": 92.0,
+                    "N": 70.0,
+                    "E": 56.0,
+                    "S": 69.0,
+                    "W": 76.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_C_Veins": 8.062896078017314,
+                "sdCaliberFC_C_Veins": 4.126521716092223,
+                "meanBigXCaliberFC_C_Veins": 9.71438352570983,
+                "sdBigXCaliberFC_C_Veins": 3.211349851192353,
+                "nbXFC_C_Veins": 6.0,
+                "meanCaliberFull_C_Veins": 6.870922514063453,
+                "sdCaliberFull_C_Veins": 3.729024666775493,
+                "meanBigXCaliberFull_C_Veins": 9.096579849526552,
+                "sdBigXCaliberFull_C_Veins": 1.995620027743558,
+                "nbXFull_C_Veins": 6.0
+            },
+            "Topologie": {
+                "fractalDim_C_Veins": 1.2681766425464185,
+                "nbCC_C_Veins": 9.0,
+                "area_C_Veins": 17359.0,
+                "areaSkeleton_C_Veins": 1868.0
+            },
+            "Points_critiques": {
+                "nbEndP_C_Veins": 26.0,
+                "nbCrossP_C_Veins": 10.0
+            },
+            "Tortuosite": {}
+        },
+        "Out": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 4.0,
+                    "N": 4.0,
+                    "E": 4.0,
+                    "S": 4.0,
+                    "W": 4.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_Out_Veins": 8.246311628330263,
+                "sdCaliberFC_Out_Veins": 4.4413878990856,
+                "meanBigXCaliberFC_Out_Veins": 9.454030233051972,
+                "sdBigXCaliberFC_Out_Veins": 3.5781966525748676,
+                "nbXFC_Out_Veins": 6.0,
+                "meanCaliberFull_Out_Veins": 7.153083772736214,
+                "sdCaliberFull_Out_Veins": 1.7922200349104092,
+                "meanBigXCaliberFull_Out_Veins": 7.153083772736216,
+                "sdBigXCaliberFull_Out_Veins": 1.7922200349104092,
+                "nbXFull_Out_Veins": 6.0
+            },
+            "Topologie": {
+                "fractalDim_Out_Veins": 1.3854429550527223,
+                "nbCC_Out_Veins": 6.0,
+                "area_Out_Veins": 24686.0,
+                "areaSkeleton_Out_Veins": 3537.0
+            },
+            "Points_critiques": {
+                "nbEndP_Out_Veins": 43.0,
+                "nbCrossP_Out_Veins": 29.0
+            },
+            "Tortuosite": {}
+        },
+        "All": {
+            "Secteurs": {
+                "wpr": {
+                    "T": 5.0,
+                    "N": 5.0,
+                    "E": 5.0,
+                    "S": 5.0,
+                    "W": 5.0
+                },
+                "vzr": {
+                    "T": 100.0,
+                    "N": 100.0,
+                    "E": 100.0,
+                    "S": 100.0,
+                    "W": 100.0
+                }
+            },
+            "Calibre": {
+                "meanCaliberFC_All_Veins": 2.4082633053221287,
+                "sdCaliberFC_All_Veins": 0.6808890906641373,
+                "meanBigXCaliberFC_All_Veins": 2.4082633053221287,
+                "sdBigXCaliberFC_All_Veins": 0.6808890906641373,
+                "nbXFC_All_Veins": 3.0,
+                "meanCaliberFull_All_Veins": 7.009936968825365,
+                "sdCaliberFull_All_Veins": 1.7152317624444628,
+                "meanBigXCaliberFull_All_Veins": 7.009936968825365,
+                "sdBigXCaliberFull_All_Veins": 1.7152317624444628,
+                "nbXFull_All_Veins": 6.0
+            },
+            "Topologie": {
+                "fractalDim_All_Veins": 1.4900717724126489,
+                "nbCC_All_Veins": 6.0,
+                "area_All_Veins": 47457.0,
+                "areaSkeleton_All_Veins": 6057.0,
+                "maxDepth_All_Veins": 3.0,
+                "residualState_All_Veins": "completed"
+            },
+            "Points_critiques": {
+                "nbEndP_All_Veins": 56.0,
+                "nbCrossP_All_Veins": 45.0
+            },
+            "Tortuosite": {
+                "meanSiTort_All_Veins": 1.0124098829244357,
+                "sdSiTort_All_Veins": 0.04276135018517199,
+                "maxSiTort_All_Veins": 1.25,
+                "meanCuTort_All_Veins": 0.29855266627374377,
+                "sdCuTort_All_Veins": 0.20004654374099845,
+                "maxCuTort_All_Veins": 0.7071067811865474
+            }
+        }
+    },
+    "AV": {
+        "A": {
+            "Secteurs": {},
+            "Calibre": {
+                "avrBigXCaliberFC_A_AV": 1.957218391145765,
+                "avrBigXCaliberFull_A_AV": 1.0983689387617552
+            },
+            "Topologie": {},
+            "Points_critiques": {
+                "nbOverlapP_A_AV": 5.0
+            },
+            "Tortuosite": {}
+        },
+        "B": {
+            "Secteurs": {},
+            "Calibre": {
+                "avrBigXCaliberFC_B_AV": 0.5310046148092479,
+                "avrBigXCaliberFull_B_AV": 0.07575516463083945
+            },
+            "Topologie": {},
+            "Points_critiques": {
+                "nbOverlapP_B_AV": 5.0
+            },
+            "Tortuosite": {}
+        },
+        "C": {
+            "Secteurs": {},
+            "Calibre": {
+                "avrBigXCaliberFC_C_AV": 0.49846174245749797,
+                "avrBigXCaliberFull_C_AV": 1.171750562153883
+            },
+            "Topologie": {},
+            "Points_critiques": {
+                "nbOverlapP_C_AV": 12.0
+            },
+            "Tortuosite": {}
+        },
+        "Out": {
+            "Secteurs": {},
+            "Calibre": {
+                "avrBigXCaliberFC_Out_AV": 0.6126860027842701,
+                "avrBigXCaliberFull_Out_AV": 0.6366910620938028
+            },
+            "Topologie": {},
+            "Points_critiques": {
+                "nbOverlapP_Out_AV": 25.0
+            },
+            "Tortuosite": {}
+        },
+        "All": {
+            "Secteurs": {},
+            "Calibre": {
+                "avrBigXCaliberFC_All_AV": 1.7715051829222919,
+                "avrBigXCaliberFull_All_AV": 0.8519360739787821
+            },
+            "Topologie": {},
+            "Points_critiques": {
+                "nbOverlapP_All_AV": 42.0
+            },
+            "Tortuosite": {}
+        }
+    }
+}

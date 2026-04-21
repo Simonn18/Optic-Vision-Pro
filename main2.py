@@ -27,6 +27,9 @@ from chargement_images import load_images, images_paths
 from affichage_images import conversion_qpixmap
 from Editer_Disque import mouse, dragging, EndPos, CurPos
 
+
+
+
 CARD  = "#000000"
 BG    = "#f0f0f0"
 
@@ -248,7 +251,7 @@ class MyWindow(QMainWindow):
                 self.chemin_image = chemin
                 self.path_image_courante = chemin
                 self.list_paths = images_paths(chemin)
-
+                
                 # Chercher un config_segmentation.json dans le même dossier fundus_images
                 dossier_fundus = os.path.dirname(chemin)
                 chemin_config = os.path.join(dossier_fundus, "config_segmentation.json")
@@ -297,7 +300,6 @@ class MyWindow(QMainWindow):
                 # tableau_seg() crée la segmentation_window
                 self.tableau_seg()
                 
-                # ✅ Appliquer la config aux sliders APRÈS création de la toolbox
                 if config:
                     layers = config.get("layers", {})
                     fundus_opacity = config.get("fundus", {}).get("opacity", 0.5)
@@ -308,7 +310,6 @@ class MyWindow(QMainWindow):
                     self.segmentation_window.sliders["arteres"].setValue(int(layers.get("arteres", {}).get("opacity", 0.5) * 100))
                     self.segmentation_window.sliders["disque"].setValue(int(layers.get("disque_optique", {}).get("opacity", 0.5) * 100))
 
-                    # ✅ Mettre à jour aussi les couleurs des boutons dans la toolbox
                     for key, json_key in [("veines", "veines"), ("arteres", "arteres"), ("disque", "disque_optique")]:
                         if json_key in layers:
                             couleur_hex = layers[json_key]["color"]
@@ -335,7 +336,6 @@ class MyWindow(QMainWindow):
         self.actAfficherToolbox.triggered.connect(self.segmentation_window.setVisible)
         self.segmentation_window.visibilityChanged.connect(self.actAfficherToolbox.setChecked)
         
-        # ✅ Activer automatiquement toutes les segmentations
         self.segmentation_window.activate_all_segmentations()
     
     
@@ -367,13 +367,14 @@ class MyWindow(QMainWindow):
         
     #------------------ACTION 4 : EDITER LE DISQUE OPTIQUE-----------------
     def edit_disque_optique(self):
-        h, w = self.shape[:2]
+        img = cv2.imread(self.list_paths[3])
+        h, w = img.shape[:2]
 
-        mask = np.any(self != [0, 0, 0], axis=-1).astype(np.uint8) * 255
+        mask = np.any(img != [0, 0, 0], axis=-1).astype(np.uint8) * 255
 
-        shape = cv2.bitwise_and(self, self, mask=mask)
+        shape = cv2.bitwise_and(img, img, mask=mask)
 
-        background = self.copy()
+        background = img.copy()
         background[mask > 0] = 0
 
         cv2.namedWindow("Image")
@@ -390,10 +391,11 @@ class MyWindow(QMainWindow):
             temp[shifted_mask > 0] = shifted_shape[shifted_mask > 0]
             cv2.imshow("Image", temp)
             if cv2.waitKey(1) == 13 : #13ENTER 27ESC
-                cv2.imwrite("result.png", temp)
+                cv2.imwrite(self.list_paths[3], temp)
                 break
             
         cv2.destroyAllWindows()
+
          
     # #------------------ACTION 5 : VALIDER LE DISQUE OPTIQUE-----------------
     # def valider_disque_optique(self):
@@ -621,8 +623,10 @@ class MyWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
             
+
+            
     #------------------ACTION 10 : REUNITIALISER ET SAUVEGARDER-----------------
-    def reset(self,choix):
+    def reset(self, choix):
         msgBox = QMessageBox(self)
         msgBox.setInformativeText(f"Voulez-vous sauvegarder les précédentes modifications avant de changer {choix} ?")
         msgBox.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.StandardButton.Cancel)
@@ -632,11 +636,12 @@ class MyWindow(QMainWindow):
         match ret:
             case QMessageBox.Save:
                 self.save()
-                self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
-
+                self.statusBar().showMessage("Sauvegarde effectuée.")
+            case QMessageBox.Discard:
+                pass  
             case QMessageBox.StandardButton.Cancel:
-                return
-            
+                return  
+
         # Fermer les fenêtres dock si elles existent
         if self.segmentation_window is not None:
             self.segmentation_window.close()
@@ -645,24 +650,42 @@ class MyWindow(QMainWindow):
         if self.toolbox is not None:
             self.toolbox.close()
             self.toolbox = None
-            
+
+        # ✅ Réinitialiser TOUS les chemins
         self.chemin_image          = None
         self.chemin_veines         = None
         self.chemin_arteres        = None
         self.chemin_disque         = None
+        self.path_image_courante   = None   # ← manquait
+        self.list_paths            = None   # ← manquait
         self.panel_active          = False
         self.affichage_double      = None
         self.od_valide             = False
         self.segmentation_terminee = False
-        self.statusBar().showMessage("ETAPE 1 : Telecharger une image de fond d'oeil.")
+
+        # ✅ Réinitialiser les items de scène
+        self.item_fundus    = None          # ← manquait
+        self.item_veins     = None          # ← manquait
+        self.item_arteries  = None          # ← manquait
+        self.item_od        = None          # ← manquait
+
+        # ✅ Réinitialiser les couleurs par défaut
+        self.couleurs = {                   # ← manquait
+            "veines":  (0,   0,   255, 255),
+            "arteres": (255, 0,   100, 255),
+            "disque":  (0,   255, 0,   255),
+        }
+
+        # Réinitialiser les actions
         self.actSave.setEnabled(False)
         self.actOpacite.setEnabled(False)
         self.actEditerDisque.setEnabled(False)
         self.act_valider_od.setEnabled(False)
         self.act_run_seg.setEnabled(False)
         self.actPleinEcran.setEnabled(False)
-        self.lbl_import.clear()
-        self._init_panels()
+
+        self.statusBar().showMessage("ETAPE 1 : Telecharger une image de fond d'oeil.")
+        self._init_panels()  # ← recrée scene, vue, lbl_import
         
     def modif_couleurs(self, key: str, color_modif: tuple):
         """Reçoit la nouvelle couleur depuis SegmentationToolbox."""
