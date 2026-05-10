@@ -21,7 +21,6 @@ import measurements2 as m_script
 import read_csv as rc
 from chargement_images import load_images, images_paths
 from affichage_images import conversion_qpixmap
-# from image_strip import ImageStripContainer
 
 
 BG    = "#000000"  # Fond app : noir pur
@@ -1039,9 +1038,11 @@ class MainWindow(QMainWindow):
             dossier_fundus_dest  = os.path.join(dossier_projet, "fundus_images")
             dossier_masks        = os.path.join(dossier_projet, "segmentation_masks")
             dossier_results      = os.path.join(dossier_projet, "results")
+            dossier_fundus_seg   = os.path.join(dossier_projet, "fundus_rendu_images_finales")
  
             os.makedirs(dossier_fundus_dest, exist_ok=True)
             os.makedirs(dossier_results,     exist_ok=True)
+            os.makedirs(dossier_fundus_seg,  exist_ok=True)
  
             # Masques binarisés (veins, arteries, od)
             try:
@@ -1076,7 +1077,7 @@ class MainWindow(QMainWindow):
             image_fusionnee = self.generer_rendu_fusionne()
             if image_fusionnee:
                 image_fusionnee.save(
-                    os.path.join(dossier_fundus_dest, f"{nom_ovp}_rendu.png")
+                    os.path.join(dossier_fundus_seg, f"{nom_ovp}_rendu.png")
                 )
  
             # Config JSON
@@ -1114,9 +1115,12 @@ class MainWindow(QMainWindow):
         dossier_fundus_dest = os.path.join(dossier_projet, "fundus_images")
         dossier_masks       = os.path.join(dossier_projet, "segmentation_masks")
         dossier_results     = os.path.join(dossier_projet, "results")
+        dossier_image_seg   = os.path.join(dossier_projet, "fundus_rendu_images_finales")
+
 
         os.makedirs(dossier_fundus_dest, exist_ok=True)
         os.makedirs(dossier_results,     exist_ok=True)
+        os.makedirs(dossier_image_seg,   exist_ok=True)
 
         # Masques binarisés
         try:
@@ -1139,7 +1143,7 @@ class MainWindow(QMainWindow):
         if chemin_image == self.chemin_image:
             image_fusionnee = self.generer_rendu_fusionne()
             if image_fusionnee:
-                image_fusionnee.save(os.path.join(dossier_fundus_dest, f"{nom_ovp}_rendu.png"))
+                image_fusionnee.save(os.path.join(dossier_image_seg, f"{nom_ovp}_rendu.png"))
 
         # Config JSON
         if self.segmentation_window and chemin_image == self.chemin_image:
@@ -1206,7 +1210,7 @@ class MainWindow(QMainWindow):
 
         messageBox = StyledMessageBox(self)
         messageBox.setWindowTitle("Sauvegarde des images")
-        messageBox.setText("Voulez-vous un dossier par image (1)ou un dossier pour toutes les images (2) ?")
+        messageBox.setText("Voulez-vous un dossier par image (1) ou un dossier pour toutes les images (2) ?")
         btn_QAS = messageBox.addButton("1", QMessageBox.ActionRole)
         btn_QSS = messageBox.addButton("2", QMessageBox.ActionRole)
         messageBox.addButton(QMessageBox.Cancel)
