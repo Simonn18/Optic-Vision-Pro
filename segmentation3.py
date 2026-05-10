@@ -439,7 +439,6 @@ class SegmentationToolbox(QDockWidget):
         btn_non = rep.addButton("Non", QMessageBox.ActionRole)
         rep.exec()
         if rep.clickedButton() == btn_oui:
-            print("caca")
             self.btn_lancer.setEnabled(True)
         if rep.clickedButton() == btn_non:
             return

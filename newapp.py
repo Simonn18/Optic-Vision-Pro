@@ -376,7 +376,7 @@ class ImageStripContainer(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Optic Vision Pro — Aperçu lecteur")
+        self.setWindowTitle("Optic Vision Pro")
         self.resize(1000, 700)
         self.setStyleSheet(f"background-color: {BG}; color: white;")
 
@@ -458,7 +458,7 @@ class MainWindow(QMainWindow):
         top_layout.setContentsMargins(16, 0, 16, 0)
 
         lbl_titre = QLabel("OPTIC VISION PRO")
-        lbl_titre.setStyleSheet("font-size: 13px; font-weight: bold; color: #7f00ff; letter-spacing: 2px;")
+        lbl_titre.setStyleSheet("font-size: 13px; font-weight: bold; color: #c8c8ff; letter-spacing: 2px;")
 
         self.dossier_travail = QPushButton("📂  Ouvrir un dossier de travail")
         self.dossier_travail.setFixedHeight(32)
@@ -732,7 +732,7 @@ class MainWindow(QMainWindow):
         nom         = os.path.basename(chemin)
         nb_images   = len(self.image_strip.strip_fundus.chemins)
         num_affiche = self.index_courant + 1
-        self.setWindowTitle(f"Optic Vision Pro — {num_affiche}/{nb_images} - {nom}")
+        self.setWindowTitle(f"Optic Vision Pro — {num_affiche}/{nb_images}")
         self.lbl_image_num.setText(f"Image {num_affiche}/{nb_images}")
         self.btn_precedent.setEnabled(self.index_courant > 0)
         self.btn_suivant.setEnabled(self.index_courant < nb_images - 1)
@@ -901,7 +901,6 @@ class MainWindow(QMainWindow):
                 self.toolbox.afficher_donnees(data_complete)
 
                 self.statusBar().showMessage(f"Mesures terminées pour {nom_image}.")
-                StyledMessageBox.information(self, "Mesures lancées", f"Mesures enregistrées pour {nom_image}.")
             else:
                 self.statusBar().showMessage("Erreur : Le script n'a généré aucune ligne de données.")
 
