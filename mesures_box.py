@@ -88,6 +88,9 @@ class MesuresToolbox(QDockWidget):
         self.setMinimumWidth(210)
         self.setStyleSheet(self.TOOLBOX_STYLE)
 
+        # Données de l'image courante (injectées par ff2.py via afficher_donnees)
+        self.data_courante = None
+
         root = QWidget()
         root.setStyleSheet("background: #f4fbf6;")
         scroll = QScrollArea()
@@ -258,37 +261,80 @@ class MesuresToolbox(QDockWidget):
 
         return vaisseaux, zones, groupes
 
-    def lancer_mesures(self):
+    def afficher_donnees(self, data: dict):
+        """Reçoit les données de l'image courante depuis ff2.py et les stocke."""
+        self.data_courante = data
+        self.tree.clear()  # Vide l'affichage précédent
+        self.show()
 
+    def lancer_mesures(self):
         vaisseaux, zones, groupes = self.selections()
-        
+
         if not vaisseaux or not zones or not groupes:
-            QMessageBox.warning(self, "Sélection incomplète", 
+            QMessageBox.warning(self, "Sélection incomplète",
                                 "Cochez au moins un élément dans chaque groupe.")
             return
 
+        # Utiliser data_courante si disponible, sinon fallback sur data.json
+        if self.data_courante:
+            data_test = self.data_courante
+        else:
+            try:
+                with open('data.json', 'r') as f:
+                    data_test = json.load(f)
+            except FileNotFoundError:
+                QMessageBox.critical(self, "Erreur",
+                    "Aucune mesure disponible pour cette image.\n"
+                    "Lancez d'abord les mesures depuis le panneau de segmentation.")
+                return
 
         try:
-            with open('data.json', 'r') as f:
-                data_test = json.load(f)
-            
             resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
-            QMessageBox.information(self, "Succès","Les mesures ont été enregistées dans votre dossier")
 
-            print("--- DONNÉES FILTRÉES ---")
             if resultat:
                 self.remplir_interface(resultat)
-            
+
             return resultat
-            
-        
-        except FileNotFoundError:
-            QMessageBox.critical(self, "Erreur", "Le fichier data.json est introuvable dans le dossier.")
 
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du filtrage : {str(e)}")
 
-            
-    
-        
+    def exporter_resultats(self):
+        vaisseaux, zones, groupes = self.selections()
+
+        # Utiliser data_courante si disponible, sinon fallback sur data.json
+        if self.data_courante:
+            data_test = self.data_courante
+        else:
+            try:
+                with open('data.json', 'r') as f:
+                    data_test = json.load(f)
+            except FileNotFoundError:
+                QMessageBox.critical(self, "Erreur",
+                    "Aucune mesure disponible pour cette image.\n"
+                    "Lancez d'abord les mesures depuis le panneau de segmentation.")
+                return
+
+        try:
+            resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+
+            if not resultat:
+                QMessageBox.warning(self, "Export impossible",
+                    "Aucune donnée à exporter. Lancez d'abord une mesure.")
+                return
+
+            chemin_save, _ = QFileDialog.getSaveFileName(
+                self, "Enregistrer le rapport", "rapport_mesures.txt", "Fichiers Texte (*.txt)"
+            )
+
+            if chemin_save:
+                rc.export_txt(resultat, chemin_save)
+                QMessageBox.information(self, "Export réussi",
+                    f"Le rapport a été enregistré ici :\n{chemin_save}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur Export", f"Une erreur est survenue : {str(e)}")
+
     def remplir_interface(self, data):
         """Remplit le QTreeWidget avec les données filtrées."""
         self.tree.clear()
@@ -307,8 +353,7 @@ class MesuresToolbox(QDockWidget):
                     
                     if isinstance(mesures, dict):
                         for mesure, valeur in mesures.items():
-                            # Gestion spécifique pour les sous-secteurs wpr/vzr
-                            if isinstance(valeur, dict): 
+                            if isinstance(valeur, dict):
                                 item_sub = QTreeWidgetItem(item_groupe, [mesure])
                                 for sub_m, sub_v in valeur.items():
                                     v_str = f"{sub_v}" if isinstance(sub_v, float) else str(sub_v)
@@ -318,28 +363,3 @@ class MesuresToolbox(QDockWidget):
                                 QTreeWidgetItem(item_groupe, [mesure, v_str])
         
         self.tree.expandAll()
-
-    def exporter_resultats(self):
-        vaisseaux, zones, groupes = self.selections()
-        
-        try:
-            with open('data.json', 'r') as f:
-                data_test = json.load(f)
-            
-            resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
-            
-            if not resultat:
-                QMessageBox.warning(self, "Export impossible", "Aucune donnée à exporter. Lancez d'abord une mesure.")
-                return
-
-            # Fenêtre de dialogue pour choisir l'emplacement
-            chemin_save, _ = QFileDialog.getSaveFileName(
-                self, "Enregistrer le rapport", "rapport_mesures.txt", "Fichiers Texte (*.txt)"
-            )
-
-            if chemin_save:
-                rc.export_txt(resultat, chemin_save)
-                QMessageBox.information(self, "Export réussi", f"Le rapport a été enregistré ici :\n{chemin_save}")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur Export", f"Une erreur est survenue : {str(e)}")

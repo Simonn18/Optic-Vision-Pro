@@ -6,26 +6,24 @@ import numpy as np
 import json
 import skimage as ski
 
-
 from PySide6 import QtGui
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont
+from PySide6.QtCore import Qt, Slot, QPoint
+from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont, QImage, QBitmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog, 
     QLabel, QMenu, QStatusBar, QDialog, QVBoxLayout, QHBoxLayout,
     QPushButton, QWidget, QStyle, QDockWidget, QCheckBox, QGraphicsScene, QGraphicsView,
-    QGroupBox, QScrollArea, QFrame, QSizePolicy, QInputDialog, QSplashScreen)
+    QGroupBox, QScrollArea, QFrame, QSizePolicy, QInputDialog, QSplashScreen, QGraphicsItem)
 
 import opacite as op
 import mesures_box as mb
 import plein_ecran as pe
-import segmentation2 as seg
+import segmentation as seg
 import measurements2 as m_script
 # import superposition_imagesv3 as sp
 import read_csv as rc
 from chargement_images import load_images, images_paths
 from affichage_images import conversion_qpixmap
-from Editer_Disque import mouse, dragging, EndPos, CurPos
 
 
 
@@ -292,11 +290,13 @@ class MyWindow(QMainWindow):
         self.actEditerDisque.setShortcut("Ctrl+E")
         self.actEditerDisque.setStatusTip("Editer le disque optique")
         self.actEditerDisque.setEnabled(False)
+        self.actEditerDisque.setCheckable(True)
+        self.actEditerDisque.triggered.connect(self.edit_disque_optique)
 
         self.act_valider_od = QAction("Valider le Disque Optique", self)
         self.act_valider_od.setShortcut("Ctrl+Y")
         self.act_valider_od.setEnabled(False)
-        #self.act_valider_od.triggered.connect(self.valider_disque_optique)
+        self.act_valider_od.triggered.connect(self.valider_disque_optique)
 
         self.act_run_seg = QAction("Lancer les mesures", self)
         self.act_run_seg.setShortcut("Ctrl+M")
@@ -504,50 +504,55 @@ class MyWindow(QMainWindow):
     def open_opacite(self):
         dialog = op.Opacite(self)
         dialog.exec()
-        
+
     #------------------ACTION 4 : EDITER LE DISQUE OPTIQUE-----------------
-    def edit_disque_optique(self):
-        img = cv2.imread(self.list_paths[3])
-        h, w = img.shape[:2]
+    def edit_disque_optique(self, state = None) :
+        if state == None : 
+            state = self.actEditerDisque.isChecked()
 
-        mask = np.any(img != [0, 0, 0], axis=-1).astype(np.uint8) * 255
+        self.actEditerDisque.setChecked(state)
+        
+        if self.segmentation_window:
+            self.segmentation_window.btn_editer.setChecked(state)
 
-        shape = cv2.bitwise_and(img, img, mask=mask)
+        if self.item_od:
+            self.item_od.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, state)
+        print(f"Édition disque : {state}")
 
-        background = img.copy()
-        background[mask > 0] = 0
+        if state == True : 
+            self.item_od.setCursor(Qt.CursorShape.OpenHandCursor)
+        if state == False :
+            self.item_od.setCursor(Qt.CursorShape.ArrowCursor)
 
-        cv2.namedWindow("Image")
-        cv2.setMouseCallback("Image", mouse)
-
-        while True :
-            temp=background.copy()
-
-            M = np.float32([[1, 0, EndPos[0]], [0, 1, EndPos[1]]])
-
-            shifted_shape = cv2.warpAffine(shape, M, (w, h))
-            shifted_mask = cv2.warpAffine(mask, M, (w, h))
-
-            temp[shifted_mask > 0] = shifted_shape[shifted_mask > 0]
-            cv2.imshow("Image", temp)
-            if cv2.waitKey(1) == 13 : #13ENTER 27ESC
-                cv2.imwrite(self.list_paths[3], temp)
-                break
-            
-        cv2.destroyAllWindows()
 
          
     # #------------------ACTION 5 : VALIDER LE DISQUE OPTIQUE-----------------
-    # def valider_disque_optique(self):
-    #     rep = QMessageBox.question(self, "Validation", 
-    #         "Confirmez-vous le placement du Disque Optique ?")
+    def valider_disque_optique(self):
+            image_init = ski.io.imread(self.list_paths[3])
+            h_init, w_init = image_init.shape[:2]
+            image_noire = np.zeros_like(image_init)
 
-    #     if rep == QMessageBox.Yes:
-    #         self.od_valide = True
-                        
-    #         self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
-    #     else:
-    #         self.statusBar().showMessage("Ajustez le disque optique avant de valider.")
+            pixmap_disque = self.item_od.pixmap()
+            pos_x = int(self.item_od.pos().x())
+            pos_y = int(self.item_od.pos().y())
+
+            canva = QImage(w_init, h_init, QImage.Format.Format_Grayscale8)
+            canva.fill(0)
+
+            painter = QPainter(canva)
+            painter.drawPixmap(QPoint(pos_x, pos_y), pixmap_disque)
+            painter.end()
+
+            buffer = canva.constBits()
+            masque_numpy = np.array(buffer).reshape((h_init,  w_init))
+
+            self.od_valide = True
+            ski.io.imsave(self.list_paths[3], masque_numpy)
+
+            self.statusBar().showMessage("Configuration validée. Vous pouvez lancer la segmentation avant de définir les paramètres.")
+
+
+        
             
         
     #------------------ACTION 6 : LANCER LES MESURES-----------------
@@ -640,7 +645,6 @@ class MyWindow(QMainWindow):
 
         for item, key in calques:
             if item and item.opacity() > 0:
-                # On récupère le pixmap du calque (qui est déjà coloré par votre fonction _recharger_masques)
                 pix = item.pixmap()
                 painter.setOpacity(item.opacity()) # On applique l'opacité choisie par l'utilisateur
                 painter.drawPixmap(0, 0, pix)
@@ -791,7 +795,6 @@ class MyWindow(QMainWindow):
             self.toolbox.close()
             self.toolbox = None
 
-        # ✅ Réinitialiser TOUS les chemins
         self.chemin_image          = None
         self.chemin_veines         = None
         self.chemin_arteres        = None
@@ -803,13 +806,11 @@ class MyWindow(QMainWindow):
         self.od_valide             = False
         self.segmentation_terminee = False
 
-        # ✅ Réinitialiser les items de scène
         self.item_fundus    = None          
         self.item_veins     = None         
         self.item_arteries  = None          
         self.item_od        = None          
 
-        # ✅ Réinitialiser les couleurs par défaut
         self.couleurs = {                   
             "veines":  (0,   0,   255, 255),
             "arteres": (255, 0,   100, 255),
@@ -850,7 +851,6 @@ class MyWindow(QMainWindow):
             couleur_disque=self.couleurs["disque"],
         )
         
-        # ✅ Reconvertir en QPixmap et mettre à jour la scène
         pixmap_fundus, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
             image_originale, mask_veins, mask_arteries, mask_od
         )

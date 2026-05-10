@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QGroupBox,
-    QCheckBox, QPushButton, QScrollArea,
+    QCheckBox, QPushButton, QHBoxLayout, QScrollArea,
     QSlider, QLabel, QMessageBox, QColorDialog)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -10,20 +10,104 @@ BLUE   = "#2a6496"
 RED    = "#e74c3c"
 GREEN  = "#27ae60"
 ORANGE = "#e67e22"
-MAGENTA =  "#e622d9"
 
 # Config des dialogues couleur : clé → (titre, couleur par défaut Qt)
 COLOR_CONFIG = {
     "veines":  ("Choisir la couleur des veines",         Qt.blue),
     "arteres": ("Choisir la couleur des artères",        Qt.red),
     "disque":  ("Choisir la couleur du disque optique",  Qt.green),
-    "superposition":    ("Choisir la couleur du disque optique",  Qt.magenta)
 }
+
+MSG_STYLE = """
+    QMessageBox {
+        background-color: #1e1e2e;
+        border: 1px solid #3a3a5a;
+        border-radius: 10px;
+        color: #ffffff;
+    }
+    QMessageBox QLabel {
+        color: #e0e0f0;
+        font-size: 13px;
+        padding: 6px;
+        background: transparent;
+    }
+    QMessageBox QPushButton {
+        background-color: #2e2e4e;
+        color: #c8c8ff;
+        border: 1px solid #5555aa;
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 12px;
+        font-weight: bold;
+        min-width: 80px;
+    }
+    QMessageBox QPushButton:hover {
+        background-color: #3e3e6e;
+        color: #ffffff;
+        border-color: #8888cc;
+    }
+    QMessageBox QPushButton:pressed {
+        background-color: #5555aa;
+    }
+"""
+
+
+class StyledMessageBox(QMessageBox):
+    """QMessageBox avec style personnalisé appliqué automatiquement."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setStyleSheet(MSG_STYLE)
+
+    @staticmethod
+    def information(parent, titre, texte, buttons=QMessageBox.Ok):
+        mb = StyledMessageBox(parent)
+        mb.setWindowTitle(titre)
+        mb.setText(texte)
+        mb.setStandardButtons(buttons)
+        mb.setIcon(QMessageBox.Information)
+        return mb.exec()
+
+    @staticmethod
+    def warning(parent, titre, texte, buttons=QMessageBox.Ok):
+        mb = StyledMessageBox(parent)
+        mb.setWindowTitle(titre)
+        mb.setText(texte)
+        mb.setStandardButtons(buttons)
+        mb.setIcon(QMessageBox.Warning)
+        return mb.exec()
+
+    @staticmethod
+    def critical(parent, titre, texte, buttons=QMessageBox.Ok):
+        mb = StyledMessageBox(parent)
+        mb.setWindowTitle(titre)
+        mb.setText(texte)
+        mb.setStandardButtons(buttons)
+        mb.setIcon(QMessageBox.Critical)
+        return mb.exec()
+
 
 
 class SegmentationToolbox(QDockWidget):
 
     TOOLBOX_STYLE = """
+    QDockWidget {
+        background: #f4fbf6;
+    }
+    QScrollArea {
+        background: #f4fbf6;
+        border: none;
+    }
+    QScrollArea > QWidget > QWidget {
+        background: #f4fbf6;
+    }
+    QSlider {
+        background: #f4fbf6;
+    }
+    QLabel {
+        background: #f4fbf6;
+        color: #000000;
+    }
     QDockWidget::title {
         background: #2e4a3a;
         color: #ffffff;
@@ -33,6 +117,7 @@ class SegmentationToolbox(QDockWidget):
         letter-spacing: 1px;
     }
     QGroupBox {
+        background: #f4fbf6;
         font-weight: bold;
         font-size: 11px;
         color: #2e4a3a;
@@ -48,6 +133,7 @@ class SegmentationToolbox(QDockWidget):
         color: #2e8a5a;
     }
     QCheckBox {
+        background: #f4fbf6;
         font-size: 12px;
         color: #222233;
         padding: 3px 2px;
@@ -68,6 +154,7 @@ class SegmentationToolbox(QDockWidget):
     QCheckBox::indicator:disabled { border-color: #cccccc; background: #eeeeee; }
 
     QPushButton {
+        background: #f4fbf6;
         border: 1px solid #c0c0d8;
         border-radius: 4px;
         padding: 6px 10px;
@@ -82,14 +169,14 @@ class SegmentationToolbox(QDockWidget):
     QPushButton#btn_editer         { color: #000000; }
     QPushButton#btn_editer:disabled { background: #bbbbcc; color: #888899; }
 
-    QPushButton#btn_valider        { color: #000000; }
+    QPushButton#btn_valider        { color: #000000;
+}
     QPushButton#btn_valider:disabled { background: #bbbbcc; color: #888899; }
     QPushButton#btn_lancer         { color: #000000;  background: #ffffff; }
     QPushButton#btn_lancer:disabled { background: #bbbbcc; color: #888899; }
     QPushButton#btn_couleur_veines  { color: #2a6496; }
     QPushButton#btn_couleur_arteres { color: #e74c3c; }
     QPushButton#btn_couleur_disque  { color: #27ae60; }
-    QPushButton#btn_couleur_superposition { color: #e622d9}
     """
 
     SLIDER_COLORS = {
@@ -120,6 +207,16 @@ class SegmentationToolbox(QDockWidget):
     # ------------------------------------------------------------------ #
     #  Construction                                                         #
     # ------------------------------------------------------------------ #
+    
+    @staticmethod
+    def _styled_msgbox(parent, titre: str, texte: str, info: str = "") -> StyledMessageBox:
+        """Crée une QMessageBox stylisée réutilisable."""
+        mb = StyledMessageBox(parent)
+        mb.setWindowTitle(titre)
+        mb.setText(texte)
+        if info:
+            mb.setInformativeText(info)
+        return mb
 
     def _build_widgets(self):
         """Instancie tous les widgets et assigne leurs objectName."""
@@ -132,6 +229,7 @@ class SegmentationToolbox(QDockWidget):
         self.btn_editer  = QPushButton("Éditer le disque")
         self.btn_valider = QPushButton("Valider le disque")
         self.btn_lancer  = QPushButton("Lancer les mesures")
+        self.btn_lancer.setEnabled(False)
 
         self.btn_editer.setObjectName("btn_editer")
         self.btn_editer.setEnabled(False)
@@ -144,26 +242,17 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines  = QPushButton("Couleur des veines")
         self.btn_couleur_arteres = QPushButton("Couleur des artères")
         self.btn_couleur_disque  = QPushButton("Couleur du disque optique")
-        self.btn_couleur_superposition  =   QPushButton("Couleur des superpositions")
 
         self.btn_couleur_veines.setObjectName("btn_couleur_veines")
         self.btn_couleur_arteres.setObjectName("btn_couleur_arteres")
         self.btn_couleur_disque.setObjectName("btn_couleur_disque")
-        self.btn_couleur_superposition.setObjectName("btn_couleur_superposition")
 
-        # Désactivés par défaut — s'activent avec la checkbox correspondante
-        self.btn_lancer.setEnabled(False)
-        self.btn_valider.setEnabled(False)
-        self.btn_couleur_veines.setEnabled(False)
-        self.btn_couleur_arteres.setEnabled(False)
-        self.btn_couleur_disque.setEnabled(False)
-        self.btn_couleur_superposition.setEnabled(False)
+        
 
     def _build_layout(self):
         """Assemble le layout principal."""
         root = QWidget()
         root.setObjectName("toolbox_root")
-        root.setStyleSheet("QWidget#toolbox_root { background: #f4fbf6; color: #000000; }")
         self.main_layout = QVBoxLayout(root)
 
         scroll = QScrollArea()
@@ -182,7 +271,6 @@ class SegmentationToolbox(QDockWidget):
             self.btn_couleur_veines,
             self.btn_couleur_arteres,
             self.btn_couleur_disque,
-            self.btn_couleur_superposition
         ]))
 
         # Bouton principal
@@ -212,8 +300,6 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.clicked.connect(lambda: self.modifier_couleurs("veines"))
         self.btn_couleur_arteres.clicked.connect(lambda: self.modifier_couleurs("arteres"))
         self.btn_couleur_disque.clicked.connect(lambda: self.modifier_couleurs("disque"))
-        self.btn_couleur_superposition.clicked.connect(lambda: self.modifier_couleurs("superposition"))
-        
 
     # ------------------------------------------------------------------ #
     #  Helpers UI                                                           #
@@ -226,11 +312,12 @@ class SegmentationToolbox(QDockWidget):
         self._style_slider(slider, color)
 
         val_label = QLabel("50")
-        val_label.setStyleSheet("color: #000000;")
+        val_label.setStyleSheet("color: #000000; background: #f4fbf6;")
         slider.valueChanged.connect(lambda v: val_label.setText(str(v)))
         slider.valueChanged.connect(self.appliquer)
 
         container = QWidget()
+        container.setStyleSheet("background: #f4fbf6;")
         lay = QVBoxLayout(container)
         lay.setContentsMargins(5, 5, 5, 5)
         lay.addWidget(slider)
@@ -254,11 +341,12 @@ class SegmentationToolbox(QDockWidget):
         return box
 
     @staticmethod
-    def _style_slider(slider: QSlider, color: str, back_color: str = "#d0d0d0"):
+    def _style_slider(slider: QSlider, color: str = "#f4fbf6", back_color = "#f4fbf6"):
         h = 13
         m = -(h - 8) // 2
         slider.setStyleSheet(f"""
-            QSlider::groove:horizontal   {{ border: 1px solid #bbb; height: 8px; background: {back_color} }}
+            QSlider {{ background: {back_color}; }}
+            QSlider::groove:horizontal   {{ border: 1px solid #bbb; height: 8px;  }}
             QSlider::handle:horizontal   {{ background: {color}; border: 1px solid #5c5c5c;
                                             width: {h}px; height: {h}px;
                                             margin: {m}px 0; border-radius: {h//2}px; }}
@@ -281,7 +369,6 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.setEnabled(veines)
         self.btn_couleur_arteres.setEnabled(arteres)
         self.btn_couleur_disque.setEnabled(disque)
-        self.btn_couleur_superposition.setEnabled(disque)
         self.btn_editer.setEnabled(disque)
         self.btn_valider.setEnabled(disque)
 
@@ -344,15 +431,18 @@ class SegmentationToolbox(QDockWidget):
             print("Erreur : le parent ne peut pas modifier le disque")
 
     def _on_valider_disque(self):
-        rep = QMessageBox.question(
-            self, "Validation",
-            "Confirmez-vous le placement du Disque Optique ?")
-        if rep == QMessageBox.Yes:
+        rep = StyledMessageBox(self)
+        rep.setWindowTitle("Valider le disque optique")
+        rep.setText("Validation du disque optique")
+        rep.setInformativeText("Êtes-vous sûr de vouloir valider le disque optique ?")
+        btn_oui= rep.addButton("Oui", QMessageBox.ActionRole)
+        btn_non = rep.addButton("Non", QMessageBox.ActionRole)
+        rep.exec()
+        if rep.clickedButton() == btn_oui:
+            print("caca")
             self.btn_lancer.setEnabled(True)
-            
-            parent = self.parent()
-            if parent and hasattr(parent, "valider_disque_optique"):
-                parent.valider_disque_optique()
+        if rep.clickedButton() == btn_non:
+            return
 
     def _on_lancer_mesures(self):
         parent = self.parent()
@@ -366,6 +456,63 @@ class SegmentationToolbox(QDockWidget):
         lv = len(value)
         rgb = tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
         return rgb
+
+    def recup_config(self) -> dict:
+        """Retourne les couleurs et opacités actuelles (pour sauvegarde par image)."""
+        return {
+            "couleurs": {
+                "veines":  self._hex_to_rgba(self.current_colors.get("veines",  "#2a6496")),
+                "arteres": self._hex_to_rgba(self.current_colors.get("arteres", "#e74c3c")),
+                "disque":  self._hex_to_rgba(self.current_colors.get("disque",  "#27ae60")),
+            },
+            "opacites": {
+                "image":   self.sliders["image"].value(),
+                "veines":  self.sliders["veines"].value(),
+                "arteres": self.sliders["arteres"].value(),
+                "disque":  self.sliders["disque"].value(),
+            },
+            "visibilites": {
+                "veines":  self.cb_veines.isChecked(),
+                "arteres": self.cb_arteres.isChecked(),
+                "disque":  self.cb_disque.isChecked(),
+            },
+            "current_colors": dict(self.current_colors),
+        }
+
+    def restaurer_config(self, config: dict):
+        """Restaure les couleurs et opacités depuis une config sauvegardée."""
+        # Opacités
+        for key, val in config.get("opacites", {}).items():
+            if key in self.sliders:
+                self.sliders[key].blockSignals(True)
+                self.sliders[key].setValue(val)
+                self.sliders[key].blockSignals(False)
+
+        # Visibilités
+        for cb, key in [(self.cb_veines, "veines"), (self.cb_arteres, "arteres"), (self.cb_disque, "disque")]:
+            if key in config.get("visibilites", {}):
+                cb.blockSignals(True)
+                cb.setChecked(config["visibilites"][key])
+                cb.blockSignals(False)
+
+        # Couleurs boutons et sliders
+        for key, hex_color in config.get("current_colors", {}).items():
+            self.current_colors[key] = hex_color
+            bouton = getattr(self, f"btn_couleur_{key}", None)
+            if bouton:
+                bouton.setStyleSheet(f"color: {hex_color}; font-weight: bold;")
+            slider = self.sliders.get(key)
+            if slider:
+                self._style_slider(slider, hex_color)
+
+        self.update_ui()
+
+    @staticmethod
+    def _hex_to_rgba(hex_color: str) -> tuple:
+        """Convertit #rrggbb en (r, g, b, 255)."""
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return (r, g, b, 255)
 
     def recup_image(self):
         """Récupère l'état actuel depuis les items du parent (MainWindow)."""
