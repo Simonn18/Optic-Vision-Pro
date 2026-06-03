@@ -288,8 +288,10 @@ class MesuresToolbox(QDockWidget):
                                 "Cochez au moins un élément dans chaque groupe.")
             return
 
-        if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
-            QMessageBox.critical(self, "Erreur",
+            print(f"[DEBUG] chemin_json_courant = {self.chemin_json_courant}")
+            print(f"[DEBUG] existe = {os.path.exists(self.chemin_json_courant) if self.chemin_json_courant else 'N/A'}")
+            if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):           
+                QMessageBox.critical(self, "Erreur",
                 "Aucune mesure disponible pour cette image.\n"
                 "Lancez d'abord les mesures.")
             return

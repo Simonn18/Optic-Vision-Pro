@@ -769,19 +769,18 @@ class MainWindow(QMainWindow):
         self.topbar.show()
         
     def charger_dossier_travail(self):
-        if self.chemin_dossier is None:
-            chemin_dossier = QFileDialog.getExistingDirectory(self, self.T["btn_dossier_travail"], os.getcwd())
-            if chemin_dossier:
-                    # Logique pour charger les données du dossier
-                StyledMessageBox.information(self, self.T["dlg_dossier_titre"], self.T["dlg_dossier_texte"].format(nom=chemin_dossier))
-                self.chemin_dossier = chemin_dossier
-                print(self.chemin_dossier)
-            else:
-                StyledMessageBox.warning(self, self.T["dlg_dossier_erreur_titre"], self.T["dlg_dossier_erreur_texte"])
-                print(self.chemin_dossier)
-        else:
+        if self.chemin_dossier is not None:
             self.reset("de dossier")
             self.chemin_dossier = None
+
+        chemin_dossier = QFileDialog.getExistingDirectory(self, self.T["btn_dossier_travail"], os.getcwd())
+        if chemin_dossier:
+            StyledMessageBox.information(self, self.T["dlg_dossier_titre"], self.T["dlg_dossier_texte"].format(nom=chemin_dossier))
+            self.chemin_dossier = chemin_dossier
+            print(self.chemin_dossier)
+        else:
+            StyledMessageBox.warning(self, self.T["dlg_dossier_erreur_titre"], self.T["dlg_dossier_erreur_texte"])
+            print(self.chemin_dossier)
 
     @staticmethod
     def _styled_msgbox(parent, titre: str, texte: str, info: str = "") -> StyledMessageBox:
@@ -849,7 +848,7 @@ class MainWindow(QMainWindow):
         self.btn_exporter = QPushButton(self.T["btn_sauvegarder"])
         self.btn_exporter.setFixedSize(100, 32)
         self.btn_exporter.setStyleSheet(self._style_button())
-        self.btn_exporter.clicked.connect(self._save_image_courante)
+        self.btn_exporter.clicked.connect(self.save)
         
         self.btn_exporter_tous = QPushButton(self.T["btn_sauvegarder_tout"])
         self.btn_exporter_tous.setFixedSize(200, 32)
@@ -1016,26 +1015,47 @@ class MainWindow(QMainWindow):
 
         if self.chemin_dossier:
             nom_base = os.path.splitext(os.path.basename(chemin))[0]
-            
-            if "_OVP" in nom_base:
-                nom_json = nom_base.split("_OVP")[0]
-            else:
-                nom_json = nom_base
+            # nom_ovp = avec suffixe _OVP, nom_json = sans
+            while nom_base.endswith("_OVP"):
+                nom_base = nom_base[:-4]
+            nom_json = nom_base          # ex: "1"
+            nom_ovp  = f"{nom_base}_OVP" # ex: "1_OVP"
 
-            json_provisoire     = os.path.join(self.chemin_dossier, "mesures_json", f"{nom_json}_data.json")
-            json_archive        = os.path.join(self.chemin_dossier, f"{nom_json}_OVP", "results", "mesures_json", f"{nom_json}_data.json")
-            pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom_json}_data.json")
-            resultats = glob.glob(pattern)
-            json_archive_global = resultats[0] if resultats else ""
+            # Dossier du dossier d'images courant (remonte depuis fundus_images/)
+            dossier_image = os.path.dirname(chemin)
+            if os.path.basename(dossier_image) == "fundus_images":
+                dossier_image = os.path.dirname(dossier_image)
+            parent_image = os.path.dirname(dossier_image)
+
+            def _json_prov(nom):
+                return os.path.join(self.chemin_dossier, "mesures_json", f"{nom}_data.json")
+            def _json_res(nom):
+                return os.path.join(self.chemin_dossier, "results", "mesures_json", f"{nom}_data.json")
+            def _json_arch(nom):
+                return os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json")
+            def _json_glob(nom):
+                pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
+                r = glob.glob(pattern)
+                return r[0] if r else ""
+            def _json_image_results(nom):
+                return os.path.join(dossier_image, "results", "mesures_json", f"{nom}_data.json")
+            def _json_parent_glob(nom):
+                pattern = os.path.join(parent_image, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
+                r = glob.glob(pattern)
+                return r[0] if r else ""
+
+            # Cherche dans l'ordre : archive > results image > provisoire/results, avec _OVP en priorité puis sans
+            chemin_json = None
+            for nom in (nom_ovp, nom_json):
+                for candidat in (_json_arch(nom), _json_glob(nom), _json_image_results(nom), _json_parent_glob(nom), _json_prov(nom), _json_res(nom)):
+                    if candidat and os.path.exists(candidat):
+                        chemin_json = candidat
+                        break
+                if chemin_json:
+                    break
+
             self._init_toolbox()
-            if os.path.exists(json_archive):
-                self.toolbox.chemin_json_courant = json_archive
-            elif os.path.exists(json_archive_global):
-                self.toolbox.chemin_json_courant = json_archive_global
-            elif os.path.exists(json_provisoire):
-                self.toolbox.chemin_json_courant = json_provisoire
-            else:
-                self.toolbox.chemin_json_courant = None
+            self.toolbox.chemin_json_courant = chemin_json
 
     # ------------------------------------------------------------------
     # Chargement / affichage
@@ -1246,10 +1266,11 @@ class MainWindow(QMainWindow):
                 StyledMessageBox.information(self, "Annulé", "Le déplacement du disque optique a été annulé.")
                 self.item_od.setPos(0, 0)
 
- #=================Lancer mesure=======================
 
-        def trouver_json_mesures(self, nom_json):
-         """Cherche le JSON de mesures dans tous les emplacements possibles."""
+    #=================Lancer mesure=======================
+
+    def trouver_json_mesures(self, nom_json):
+        """Cherche le JSON de mesures dans tous les emplacements possibles."""
         if not self.chemin_dossier:
             return None
 
@@ -1283,62 +1304,104 @@ class MainWindow(QMainWindow):
         if self.chemin_dossier is None:
             StyledMessageBox.information(self, "Aucun dossier sélectionné", self.T["dlg_save_aucun_dossier"])
             return
-        
-        StyledMessageBox.information(self, "Mesures lancées avec succès", "Les mesures ont été lancées.")
 
-        
         self._init_toolbox()
         nom_image = os.path.basename(self.chemin_image)
         nom_base  = os.path.splitext(nom_image)[0]
-        nom_ovp   = f"{nom_base}_OVP"
+        # Normaliser : retirer tous les _OVP pour avoir la racine
+        while nom_base.endswith("_OVP"):
+            nom_base = nom_base[:-4]
+        nom_json = nom_base          # ex: "1"
+        nom_ovp  = f"{nom_base}_OVP" # ex: "1_OVP"
 
-        if "_OVP" in nom_base:
-            nom_json = nom_base.split("_OVP")[0]
+        # Dossier de l'image courante (remonte depuis fundus_images/)
+        dossier_image = os.path.dirname(self.chemin_image)
+        if os.path.basename(dossier_image) == "fundus_images":
+            dossier_image = os.path.dirname(dossier_image)
+
+        def _results_vide(dossier):
+            """Retourne True si results/ existe dans ce dossier et est vide."""
+            try:
+                d = os.path.join(dossier, "results")
+                return os.path.isdir(d) and not os.listdir(d)
+            except OSError:
+                return False
+
+        # Priorité : results/ vide du dossier d'images, puis du dossier de travail
+        if _results_vide(dossier_image):
+            dossier_results_direct = os.path.join(dossier_image, "results")
+            racine_calcul = dossier_results_direct
+        elif _results_vide(self.chemin_dossier):
+            dossier_results_direct = os.path.join(self.chemin_dossier, "results")
+            racine_calcul = dossier_results_direct
         else:
-            nom_json = nom_base
+            dossier_results_direct = os.path.join(self.chemin_dossier, "results")
+            racine_calcul = self.chemin_dossier
 
-        # Chemin provisoire (à la racine)
+        output_csv_root = os.path.join(racine_calcul, "mesures.csv")
 
-        output_csv_root = os.path.join(self.chemin_dossier, "mesures.csv")
-        json_provisoire = os.path.join(self.chemin_dossier, "mesures_json", f"{nom_json}_data.json")
-        json_archive    = os.path.join(self.chemin_dossier, f"{nom_json}_OVP", "results", "mesures_json", f"{nom_json}_data.json")
-        pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom_json}_data.json")
-        resultats = glob.glob(pattern)
-        json_archive_global = resultats[0] if resultats else ""
+        def _chercher_json(nom):
+            """Retourne le premier JSON trouvé pour ce nom (avec ou sans _OVP)."""
+            # Dossier du dossier d'images courant (remonte depuis fundus_images/)
+            dossier_image = os.path.dirname(self.chemin_image)
+            if os.path.basename(dossier_image) == "fundus_images":
+                dossier_image = os.path.dirname(dossier_image)
 
-        # --- TESTS D'EXISTENCE ---
+            candidats = [
+                os.path.join(racine_calcul, "mesures_json", f"{nom}_data.json"),
+                os.path.join(dossier_results_direct, "mesures_json", f"{nom}_data.json"),
+                os.path.join(dossier_image, "results", "mesures_json", f"{nom}_data.json"),
+                os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json"),
+            ]
+            # archive globale dans chemin_dossier
+            pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
+            candidats += glob.glob(pattern)
+            # archive globale dans le dossier parent du dossier d'images
+            parent_image = os.path.dirname(dossier_image)
+            pattern2 = os.path.join(parent_image, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
+            candidats += glob.glob(pattern2)
+            for c in candidats:
+                if c and os.path.exists(c):
+                    return c
+            return None
 
-        if os.path.exists(json_archive):
-            self.toolbox.chemin_json_courant = json_archive
+        # --- TESTS D'EXISTENCE : chercher avec _OVP d'abord, puis sans ---
+        chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
+        if chemin_json:
+            self.toolbox.chemin_json_courant = chemin_json
             self.statusBar().showMessage(self.T["status_mesures_chargees"])
             return
 
-        if os.path.exists(json_archive_global):
-            self.toolbox.chemin_json_courant = json_archive_global
-            self.statusBar().showMessage(self.T["status_mesures_chargees_global"])
-            return
-
-        if os.path.exists(output_csv_root):
-            if rc.image_est_dans_csv(output_csv_root, nom_image):
+        # --- Fallback CSV → conversion JSON ---
+        for csv_path, racine_conv in [
+            (os.path.join(dossier_results_direct, "mesures.csv"), dossier_results_direct),
+            (output_csv_root, racine_calcul),
+        ]:
+            if os.path.exists(csv_path) and rc.image_est_dans_csv(csv_path, nom_image):
                 self.statusBar().showMessage(self.T["status_chargement_mesures"])
-                rc.csv_to_jsons(output_csv_root, self.chemin_dossier)
-                self.toolbox.chemin_json_courant = json_provisoire
-                return
-            
-        # ---  SI RIEN N'EXISTE : LANCEMENT DU CALCUL ---
+                rc.csv_to_jsons(csv_path, racine_conv)
+                chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
+                if chemin_json:
+                    self.toolbox.chemin_json_courant = chemin_json
+                    return
+
+        # --- RIEN N'EXISTE : LANCEMENT DU CALCUL ---
         self.statusBar().showMessage(self.T["status_calcul"])
 
         vein_dir = self.chemin_abs("veins")
         art_dir  = self.chemin_abs("arteries")
         od_dir   = self.chemin_abs("od")
 
+        os.makedirs(os.path.join(racine_calcul, "mesures_json"), exist_ok=True)
+
         args = ["measurements.py", art_dir, vein_dir, od_dir, output_csv_root]
 
         try:
             m_script.main(args)
-            rc.csv_to_jsons(output_csv_root, self.chemin_dossier)
-            
-            self.toolbox.chemin_json_courant = json_provisoire
+            rc.csv_to_jsons(output_csv_root, racine_calcul)
+            chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
+            self.toolbox.chemin_json_courant = chemin_json
+            StyledMessageBox.information(self, "Mesures lancées avec succès", "Les mesures ont été lancées.")
             self.statusBar().showMessage(self.T["status_mesures_terminees"].format(nom=nom_image))
 
         except Exception as e:
@@ -1426,183 +1489,6 @@ class MainWindow(QMainWindow):
         painter.end()
         return image_finale
     
-    def save(self):
-        """Sauvegarde l'image courante et ses masques sous nomdebase_OVP."""
-        if not self.chemin_image:
-            self.statusBar().showMessage("Aucune image à enregistrer.")
-            return
- 
-        # Nom de base de l'image (sans extension) + suffixe OVP
-        nom_base      = os.path.splitext(os.path.basename(self.chemin_image))[0]
-        nom_ovp       = f"{nom_base}_OVP"
-        extension_src = os.path.splitext(self.chemin_image)[1]
- 
-        dossier_actuel_fundus   = os.path.dirname(self.path_image_courante)
-        chemin_config_existant  = os.path.join(dossier_actuel_fundus, "config_segmentation.json")
- 
-        if os.path.exists(chemin_config_existant):
-            msgBox = StyledMessageBox(self)
-            msgBox.setWindowTitle("Sauvegarde")
-            msgBox.setText("Un fichier de configuration existe déjà.")
-            msgBox.setInformativeText(
-                "Voulez-vous mettre à jour les réglages ou créer un nouveau projet ?"
-            )
-            btn_maj     = msgBox.addButton("Mettre à jour", QMessageBox.ActionRole)
-            btn_nouveau = msgBox.addButton("Nouveau projet", QMessageBox.ActionRole)
-            msgBox.addButton(QMessageBox.Cancel)
-            msgBox.exec()
- 
-            if msgBox.clickedButton() == btn_maj:
-                if self.segmentation_window:
-                    data_seg = self.segmentation_window.recup_image()
-                    with open(chemin_config_existant, 'w', encoding='utf-8') as f:
-                        json.dump(data_seg, f, indent=4)
-                    self.statusBar().showMessage("Réglages mis à jour avec succès.")
-                return
- 
-            elif msgBox.standardButton(msgBox.clickedButton()) == QMessageBox.Cancel:
-                return
- 
-        # Choisir le dossier de destination
-        print(self.chemin_dossier)
-        if self.chemin_dossier is None:
-            StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini. Veuillez d'abord ouvrir un dossier de travail.")
-            return
-        dossier_dest = self.chemin_dossier
-        try:
-            # Arborescence du projet
-            dossier_projet       = os.path.join(dossier_dest, nom_ovp)
-            dossier_fundus_dest  = os.path.join(dossier_projet, "fundus_images")
-            dossier_masks        = os.path.join(dossier_projet, "segmentation_masks")
-            dossier_results      = os.path.join(dossier_projet, "results")
-            dossier_fundus_seg   = os.path.join(dossier_projet, "fundus_rendu_images_finales")
- 
-            os.makedirs(dossier_fundus_dest, exist_ok=True)
-            os.makedirs(dossier_results,     exist_ok=True)
-            os.makedirs(dossier_fundus_seg,  exist_ok=True)
- 
-            # Masques binarisés (veins, arteries, od)
-            try:
-                
-                paths  = images_paths(self.path_image_courante)
-                calques = [
-                    (paths[1], "veins"),
-                    (paths[2], "arteries"),
-                    (paths[3], "od"),
-                ]
-                for chemin_mask, nom_calque in calques:
-                    if os.path.exists(chemin_mask):
-                        mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
-                        if mask_brut is not None:
-                            _, mask_bin = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
-                            sous_dossier = os.path.join(dossier_masks, nom_calque)
-                            os.makedirs(sous_dossier, exist_ok=True)
-                            cv2.imwrite(
-                                os.path.join(sous_dossier, f"{nom_ovp}.png"),
-                                mask_bin
-                            )
-            except ImportError:
-                self.statusBar().showMessage("cv2 non disponible — masques non exportés.")
- 
-            # Image originale copiée sous nomdebase_OVP
-            shutil.copy(
-                self.chemin_image,
-                os.path.join(dossier_fundus_dest, f"{nom_ovp}{extension_src}")
-            )
- 
-            # Rendu fusionné (fundus + calques visibles)
-            image_fusionnee = self.generer_rendu_fusionne()
-            if image_fusionnee:
-                image_fusionnee.save(
-                    os.path.join(dossier_fundus_seg, f"{nom_ovp}_rendu.png")
-                )
- 
-            # Config JSON
-            if self.segmentation_window:
-                data_seg = self.segmentation_window.recup_image()
-                with open(
-                    os.path.join(dossier_fundus_dest, "config_segmentation.json"),
-                    'w', encoding='utf-8'
-                ) as f:
-                    json.dump(data_seg, f, indent=4)
- 
-            # Fichiers de mesures (CSV / JSON) s'ils existent
-            csv_source = os.path.join(self.chemin_dossier, "mesures.csv")
-            if os.path.exists(csv_source):
-                csv_dest = os.path.join(dossier_results, f"{nom_ovp}_mesures.csv")
-                shutil.move(csv_source, csv_dest)
-
-            # 2. Déplacement du dossier JSON
-            json_dir_source = os.path.join(self.chemin_dossier, "mesures_json")
-            if os.path.exists(json_dir_source):
-                json_dir_dest = os.path.join(dossier_results, "mesures_json")
-                if os.path.exists(json_dir_dest):
-                    shutil.rmtree(json_dir_dest)
-                shutil.move(json_dir_source, json_dir_dest)
-    
-            self.statusBar().showMessage(f"Projet « {nom_ovp} » enregistré.")
-            StyledMessageBox.information(self, "Succès", f"Projet créé :\n{dossier_projet}")
-    
-        except Exception as e:
-            StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
-            
-            
-    def _save_une_image(self, chemin_image, dossier_dest):
-        """Sauvegarde une image et ses masques dans dossier_dest."""
-        nom_base      = os.path.splitext(os.path.basename(chemin_image))[0]
-        nom_ovp       = f"{nom_base}_OVP"
-        extension_src = os.path.splitext(chemin_image)[1]
-
-        dossier_projet      = os.path.join(dossier_dest, nom_ovp)
-        dossier_fundus_dest = os.path.join(dossier_projet, "fundus_images")
-        dossier_masks       = os.path.join(dossier_projet, "segmentation_masks")
-        dossier_results     = os.path.join(dossier_projet, "results")
-        dossier_image_seg   = os.path.join(dossier_projet, "fundus_rendu_images_finales")
-
-
-        os.makedirs(dossier_fundus_dest, exist_ok=True)
-        os.makedirs(dossier_results,     exist_ok=True)
-        os.makedirs(dossier_image_seg,   exist_ok=True)
-
-        # Masques binarisés
-        try:
-            paths = images_paths(chemin_image)
-            for chemin_mask, nom_calque in [(paths[1], "veins"), (paths[2], "arteries"), (paths[3], "od")]:
-                if os.path.exists(chemin_mask):
-                    mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
-                    if mask_brut is not None:
-                        _, mask_bin = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
-                        sous_dossier = os.path.join(dossier_masks, nom_calque)
-                        os.makedirs(sous_dossier, exist_ok=True)
-                        cv2.imwrite(os.path.join(sous_dossier, f"{nom_ovp}.png"), mask_bin)
-        except Exception as e:
-            print(f"[WARN] Masques non exportés pour {nom_base} : {e}")
-
-        # Image originale
-        shutil.copy(chemin_image, os.path.join(dossier_fundus_dest, f"{nom_ovp}{extension_src}"))
-
-        # Rendu fusionné (seulement pour l'image courante en scène)
-        if chemin_image == self.chemin_image:
-            image_fusionnee = self.generer_rendu_fusionne()
-            if image_fusionnee:
-                image_fusionnee.save(os.path.join(dossier_image_seg, f"{nom_ovp}_rendu.png"))
-
-        # Config JSON
-        if self.segmentation_window and chemin_image == self.chemin_image:
-            data_seg = self.segmentation_window.recup_image()
-            with open(os.path.join(dossier_fundus_dest, "config_segmentation.json"), 'w', encoding='utf-8') as f:
-                json.dump(data_seg, f, indent=4)
-
-        # Mesures spécifiques à cette image
-        mesures = self.mesures_par_image.get(chemin_image)
-        if mesures:
-            if os.path.exists(mesures["csv"]):
-                shutil.copy(mesures["csv"], os.path.join(dossier_results, f"{nom_ovp}_mesures.csv"))
-            if os.path.exists(mesures["json"]):
-                shutil.copy(mesures["json"], os.path.join(dossier_results, f"{nom_ovp}_data.json"))
-
-        return dossier_projet
-
     def _toggle_mode_selection(self, actif: bool):
         """Active/désactive le mode sélection sur les miniatures."""
         strip = self.image_strip.strip_fundus
@@ -1623,7 +1509,6 @@ class MainWindow(QMainWindow):
             """)
             self.btn_mode_selection.setText("Quitter")
             self.btn_exporter_selection.setVisible(True)
-            # Désactiver les boutons qui ne doivent pas interférer
             self.btn_precedent.setEnabled(False)
             self.btn_suivant.setEnabled(False)
         else:
@@ -1640,14 +1525,108 @@ class MainWindow(QMainWindow):
         self.btn_exporter_selection.setText(f"Sauvegarder ({n})")
         self.btn_exporter_selection.setEnabled(n > 0)
 
-    def _save_images_selectionnees(self):
-        """Sauvegarde les images cochées, avec le même flux que _save_toutes_images."""
-        chemins = self.image_strip.strip_fundus.chemins_selectionnes()
-        if not chemins:
-            StyledMessageBox.information(self, "Sélection vide",
-                "Aucune image sélectionnée.\nCliquez sur des miniatures pour en cocher.")
-            return
+    # ── Helpers partagés ────────────────────────────────────────────────
 
+    def _check_config_existante(self, chemin_config):
+        """Retourne True si on doit continuer, False si on annule/met-à-jour."""
+        if not os.path.exists(chemin_config):
+            return True
+
+        msgBox = StyledMessageBox(self)
+        msgBox.setWindowTitle("Sauvegarde")
+        msgBox.setText("Un fichier de configuration existe déjà.")
+        msgBox.setInformativeText("Mettre à jour les réglages ou créer un nouveau projet ?")
+        btn_maj = msgBox.addButton("Mettre à jour", QMessageBox.ActionRole)
+        msgBox.addButton("Nouveau projet",          QMessageBox.ActionRole)
+        msgBox.addButton(QMessageBox.Cancel)
+        msgBox.exec()
+
+        if msgBox.clickedButton() == btn_maj:
+            if self.segmentation_window:
+                data_seg = self.segmentation_window.recup_image()
+                with open(chemin_config, 'w', encoding='utf-8') as f:
+                    json.dump(data_seg, f, indent=4)
+                self.statusBar().showMessage("Réglages mis à jour avec succès.")
+            return False  # Ne pas continuer la sauvegarde
+
+        return msgBox.standardButton(msgBox.clickedButton()) != QMessageBox.Cancel
+
+    def _exporter_masques(self, chemin_image, dossier_masks, nom_ovp):
+        """Exporte les masques binarisés (veins, arteries, od)."""
+        try:
+            paths = images_paths(chemin_image)
+            for chemin_mask, nom_calque in [(paths[1], "veins"), (paths[2], "arteries"), (paths[3], "od")]:
+                if os.path.exists(chemin_mask):
+                    mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
+                    if mask_brut is not None:
+                        _, mask_bin = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
+                        sous_dossier = os.path.join(dossier_masks, nom_calque)
+                        os.makedirs(sous_dossier, exist_ok=True)
+                        cv2.imwrite(os.path.join(sous_dossier, f"{nom_ovp}.png"), mask_bin)
+        except Exception as e:
+            print(f"[WARN] Masques non exportés pour {nom_ovp} : {e}")
+
+    def _archiver_mesures(self, dossier_result):
+        """Déplace mesures.csv et mesures_json/ vers dossier_result."""
+        csv_src      = os.path.join(self.chemin_dossier, "mesures.csv")
+        json_dir_src = os.path.join(self.chemin_dossier, "mesures_json")
+
+        if os.path.exists(csv_src):
+            shutil.move(csv_src, os.path.join(dossier_result, "mesures_globales.csv"))
+
+        if os.path.exists(json_dir_src):
+            json_dir_dest = os.path.join(dossier_result, "mesures_json")
+            if os.path.exists(json_dir_dest):
+                shutil.rmtree(json_dir_dest)
+            shutil.move(json_dir_src, json_dir_dest)
+
+    # ── Sauvegarde d'une seule image ────────────────────────────────────
+
+    def _save_une_image(self, chemin_image, dossier_dest):
+        """Sauvegarde une image et ses masques dans dossier_dest."""
+        nom_base  = os.path.splitext(os.path.basename(chemin_image))[0]
+        while nom_base.endswith("_OVP"):
+            nom_base = nom_base[:-4]
+        nom_ovp   = f"{nom_base}_OVP"
+        extension = os.path.splitext(chemin_image)[1]
+
+        dossier_projet = os.path.join(dossier_dest, nom_ovp)
+        dossier_fundus = os.path.join(dossier_projet, "fundus_images")
+        dossier_seg    = os.path.join(dossier_projet, "fundus_rendu_images_finales")
+        dossier_result = os.path.join(dossier_projet, "results")
+
+        for d in (dossier_fundus, dossier_seg, dossier_result):
+            os.makedirs(d, exist_ok=True)
+
+        shutil.copy(chemin_image, os.path.join(dossier_fundus, f"{nom_ovp}{extension}"))
+        self._exporter_masques(chemin_image, os.path.join(dossier_projet, "segmentation_masks"), nom_ovp)
+
+        if chemin_image == self.chemin_image:
+            image_fusionnee = self.generer_rendu_fusionne()
+            if image_fusionnee:
+                image_fusionnee.save(os.path.join(dossier_seg, f"{nom_ovp}_rendu.png"))
+
+            if self.segmentation_window:
+                data_seg = self.segmentation_window.recup_image()
+                with open(os.path.join(dossier_fundus, "config_segmentation.json"), 'w', encoding='utf-8') as f:
+                    json.dump(data_seg, f, indent=4)
+
+        mesures = self.mesures_par_image.get(chemin_image)
+        if mesures:
+            for src, dest in [(mesures.get("csv"), f"{nom_ovp}_mesures.csv"),
+                              (mesures.get("json"), f"{nom_ovp}_data.json")]:
+                if src and os.path.exists(src):
+                    shutil.copy(src, os.path.join(dossier_result, dest))
+
+        return dossier_projet
+
+    # ── Sauvegarde groupée (toutes ou sélection) ────────────────────────
+
+    def _save_groupe(self, chemins):
+        """Logique commune à _save_toutes_images et _save_images_selectionnees."""
+        if not chemins:
+            self.statusBar().showMessage("Aucune image chargée.")
+            return
         if self.chemin_dossier is None:
             StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
             return
@@ -1656,110 +1635,129 @@ class MainWindow(QMainWindow):
         if not ok or not sauv_fichier.strip():
             return
 
-        messageBox = StyledMessageBox(self)
-        messageBox.setWindowTitle("Sauvegarde des images")
-        messageBox.setText("Voulez-vous un dossier par image (1) ou un dossier pour toutes les images (2) ?")
-        btn_QAS = messageBox.addButton("1", QMessageBox.ActionRole)
-        btn_QSS = messageBox.addButton("2", QMessageBox.ActionRole)
-        messageBox.addButton(QMessageBox.Cancel)
-        messageBox.exec()
+        msgBox = StyledMessageBox(self)
+        msgBox.setWindowTitle("Sauvegarde des images")
+        msgBox.setText("Un dossier par image (1) ou un dossier pour toutes les images (2) ?")
+        btn_par_image = msgBox.addButton("1", QMessageBox.ActionRole)
+        btn_global    = msgBox.addButton("2", QMessageBox.ActionRole)
+        msgBox.addButton(QMessageBox.Cancel)
+        msgBox.exec()
 
-        if messageBox.clickedButton() not in (btn_QAS, btn_QSS):
+        if msgBox.clickedButton() not in (btn_par_image, btn_global):
             return
 
-        dossier_dest = self.chemin_dossier
-        nb      = len(chemins)
-        erreurs = []
+        nb, erreurs = len(chemins), []
 
-        if messageBox.clickedButton() == btn_QAS:
-            # --- Un dossier nomimage_OVP/ par image ---
+        if msgBox.clickedButton() == btn_par_image:
+            msgRendu = StyledMessageBox(self)
+            msgRendu.setWindowTitle("Rendus finaux")
+            msgRendu.setText("Exporter tous les rendus ou seulement les images modifiées ?")
+            btn_tous  = msgRendu.addButton("Tous",      QMessageBox.ActionRole)
+            btn_modif = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
+            msgRendu.addButton(QMessageBox.Cancel)
+            msgRendu.exec()
+
+            if msgRendu.clickedButton() not in (btn_tous, btn_modif):
+                return
+
+            exporter_tous = msgRendu.clickedButton() == btn_tous
+            dossier_dest  = os.path.join(self.chemin_dossier, f"{sauv_fichier}_fundus_images_code_OVP")
+            os.makedirs(dossier_dest, exist_ok=True)
+
             for i, chemin in enumerate(chemins):
-                self.statusBar().showMessage(f"Sauvegarde {i + 1}/{nb} — {os.path.basename(chemin)}…")
+                self.statusBar().showMessage(f"Sauvegarde {i+1}/{nb} — {os.path.basename(chemin)}…")
                 QApplication.processEvents()
                 try:
-                    self._save_une_image(chemin, dossier_dest)
+                    nom_base  = os.path.splitext(os.path.basename(chemin))[0]
+                    while nom_base.endswith("_OVP"):
+                        nom_base = nom_base[:-4]
+                    nom_ovp   = f"{nom_base}_OVP"
+                    extension = os.path.splitext(chemin)[1]
+
+                    # Un dossier par image avec ses 4 sous-dossiers
+                    dossier_image  = os.path.join(dossier_dest, nom_ovp)
+                    dossier_fundus = os.path.join(dossier_image, "fundus_images")
+                    dossier_seg    = os.path.join(dossier_image, "fundus_rendu_images_finales")
+                    dossier_result = os.path.join(dossier_image, "results")
+
+                    for d in (dossier_fundus, dossier_seg, dossier_result):
+                        os.makedirs(d, exist_ok=True)
+
+                    shutil.copy(chemin, os.path.join(dossier_fundus, f"{nom_ovp}{extension}"))
+                    self._exporter_masques(chemin, os.path.join(dossier_image, "segmentation_masks"), nom_ovp)
+
+                    if exporter_tous or chemin in self.config_par_image:
+                        image_fusionnee = self._generer_rendu_pour(chemin)
+                        if image_fusionnee:
+                            image_fusionnee.save(os.path.join(dossier_seg, f"{nom_ovp}_rendu.png"))
+
+                    config = self.config_par_image.get(chemin)
+                    if not config and chemin == self.chemin_image and self.segmentation_window:
+                        config = self.segmentation_window.recup_image()
+                    if config:
+                        with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
+                            json.dump(config, f, indent=4, default=str)
+
+                    mesures = self.mesures_par_image.get(chemin)
+                    if mesures:
+                        for src, dest in [(mesures.get("csv"), f"{nom_ovp}_mesures.csv"),
+                                          (mesures.get("json"), f"{nom_ovp}_data.json")]:
+                            if src and os.path.exists(src):
+                                shutil.copy(src, os.path.join(dossier_result, dest))
+
                 except Exception as e:
                     erreurs.append(f"{os.path.basename(chemin)} : {e}")
 
         else:
-            # --- Sous-question : tous les rendus ou seulement les modifiés ? ---
             msgRendu = StyledMessageBox(self)
             msgRendu.setWindowTitle("Rendus finaux")
-            msgRendu.setText("Voulez-vous exporter tous les rendus (tous) ou seulement les images modifiées (modifiées)?")
-            btn_tous_rendus  = msgRendu.addButton("Tous", QMessageBox.ActionRole)
-            btn_modif_rendus = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
+            msgRendu.setText("Exporter tous les rendus ou seulement les images modifiées ?")
+            btn_tous  = msgRendu.addButton("Tous",      QMessageBox.ActionRole)
+            btn_modif = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
             msgRendu.addButton(QMessageBox.Cancel)
             msgRendu.exec()
 
-            if msgRendu.clickedButton() not in (btn_tous_rendus, btn_modif_rendus):
+            if msgRendu.clickedButton() not in (btn_tous, btn_modif):
                 return
 
-            exporter_tous_rendus = msgRendu.clickedButton() == btn_tous_rendus
+            exporter_tous = msgRendu.clickedButton() == btn_tous
+            dossier_dest  = os.path.join(self.chemin_dossier, f"{sauv_fichier}_fundus_images_code_OVP")
+            dossier_fundus = os.path.join(dossier_dest, "fundus_images")
+            dossier_seg    = os.path.join(dossier_dest, "fundus_rendu_images_finales")
+            dossier_result = os.path.join(dossier_dest, "results")
 
-            dossier_base       = os.path.join(dossier_dest, f"{sauv_fichier}_fundus_images_code_OVP")
-            dossier_fundus     = os.path.join(dossier_base, "fundus_images")
-            dossier_fundus_seg = os.path.join(dossier_base, "fundus_rendu_images_finales")
-            dossier_result     = os.path.join(dossier_base, "results")
-
-            os.makedirs(dossier_fundus,     exist_ok=True)
-            os.makedirs(dossier_fundus_seg, exist_ok=True)
-            os.makedirs(dossier_result,     exist_ok=True)
+            for d in (dossier_fundus, dossier_seg, dossier_result):
+                os.makedirs(d, exist_ok=True)
 
             for i, chemin in enumerate(chemins):
-                self.statusBar().showMessage(f"Sauvegarde {i + 1}/{nb} — {os.path.basename(chemin)}…")
+                self.statusBar().showMessage(f"Sauvegarde {i+1}/{nb} — {os.path.basename(chemin)}…")
                 QApplication.processEvents()
                 try:
                     nom_base  = os.path.splitext(os.path.basename(chemin))[0]
+                    while nom_base.endswith("_OVP"):
+                        nom_base = nom_base[:-4]
                     nom_ovp   = f"{nom_base}_OVP"
                     extension = os.path.splitext(chemin)[1]
 
-                    # Image originale
                     shutil.copy(chemin, os.path.join(dossier_fundus, f"{nom_ovp}{extension}"))
+                    self._exporter_masques(chemin, os.path.join(dossier_dest, "segmentation_masks"), nom_ovp)
 
-                    # Rendu fusionné selon le choix
-                    a_ete_modifie = chemin in self.config_par_image
-                    if exporter_tous_rendus or a_ete_modifie:
+                    if exporter_tous or chemin in self.config_par_image:
                         image_fusionnee = self._generer_rendu_pour(chemin)
                         if image_fusionnee:
-                            image_fusionnee.save(os.path.join(dossier_fundus_seg, f"{nom_ovp}_rendu.png"))
+                            image_fusionnee.save(os.path.join(dossier_seg, f"{nom_ovp}_rendu.png"))
 
-                    # Config JSON de la segmentation
-                    config_image = self.config_par_image.get(chemin)
-                    if config_image:
+                    config = self.config_par_image.get(chemin)
+                    if not config and chemin == self.chemin_image and self.segmentation_window:
+                        config = self.segmentation_window.recup_image()
+                    if config:
                         with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
-                            json.dump(config_image, f, indent=4, default=str)
-                    elif chemin == self.chemin_image and self.segmentation_window:
-                        data_seg = self.segmentation_window.recup_image()
-                        with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
-                            json.dump(data_seg, f, indent=4)
-
-                    # Masques binarisés
-                    paths = images_paths(chemin)
-                    for chemin_mask, nom_calque in [(paths[1], "veins"), (paths[2], "arteries"), (paths[3], "od")]:
-                        if os.path.exists(chemin_mask):
-                            mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
-                            if mask_brut is not None:
-                                _, mask_bin = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
-                                sous_dossier = os.path.join(dossier_base, "segmentation_masks", nom_calque)
-                                os.makedirs(sous_dossier, exist_ok=True)
-                                cv2.imwrite(os.path.join(sous_dossier, f"{nom_ovp}.png"), mask_bin)
+                            json.dump(config, f, indent=4, default=str)
 
                 except Exception as e:
                     erreurs.append(f"{os.path.basename(chemin)} : {e}")
 
-            csv_source = os.path.join(self.chemin_dossier, "mesures.csv")
-            json_dir_source = os.path.join(self.chemin_dossier, "mesures_json")
-
-            if os.path.exists(csv_source):
-                shutil.move(csv_source, os.path.join(dossier_result, "mesures_globales.csv"))
-
-            if os.path.exists(json_dir_source):
-                json_dir_dest = os.path.join(dossier_result, "mesures_json")
-                if os.path.exists(json_dir_dest):
-                    shutil.rmtree(json_dir_dest)
-                shutil.move(json_dir_source, json_dir_dest)
-
-            dossier_dest = dossier_base
+            self._archiver_mesures(dossier_result)
 
         if erreurs:
             StyledMessageBox.warning(self, "Sauvegarde partielle",
@@ -1768,174 +1766,78 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"{nb} images sauvegardées.")
             StyledMessageBox.information(self, "Succès", f"{nb} images sauvegardées dans :\n{dossier_dest}")
 
-    def _save_image_courante(self):
-        """Sauvegarde uniquement l'image actuellement affichée."""
-        dossier_actuel_fundus  = os.path.dirname(self.path_image_courante)
-        chemin_config_existant = os.path.join(dossier_actuel_fundus, "config_segmentation.json")
- 
-        if os.path.exists(chemin_config_existant):
-            msgBox = StyledMessageBox(self)
-            msgBox.setWindowTitle("Sauvegarde")
-            msgBox.setText("Un fichier de configuration existe déjà.")
-            msgBox.setInformativeText("Mettre à jour les réglages ou créer un nouveau projet ?")
-            btn_maj     = msgBox.addButton("Mettre à jour", QMessageBox.ActionRole)
-            btn_nouveau = msgBox.addButton("Nouveau projet", QMessageBox.ActionRole)
-            msgBox.addButton(QMessageBox.Cancel)
-            msgBox.exec()
- 
-            if msgBox.clickedButton() == btn_maj:
-                if self.segmentation_window:
-                    data_seg = self.segmentation_window.recup_image()
-                    with open(chemin_config_existant, 'w', encoding='utf-8') as f:
-                        json.dump(data_seg, f, indent=4)
-                    self.statusBar().showMessage("Réglages mis à jour avec succès.")
-                return
-            elif msgBox.standardButton(msgBox.clickedButton()) == QMessageBox.Cancel:
-                return
- 
-        dossier_dest = QFileDialog.getExistingDirectory(self, "Choisir le dossier de destination")
-        if not dossier_dest:
-            return
- 
-        try:
-            dossier_projet = self._save_une_image(self.chemin_image, dossier_dest)
-            self.statusBar().showMessage(f"Image sauvegardée.")
-            StyledMessageBox.information(self, "Succès", f"Image sauvegardée :\n{dossier_projet}")
-        except Exception as e:
-            StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
-    
-    def _save_toutes_images(self):
-        """Sauvegarde toutes les images du strip fundus."""
-        chemins = self.image_strip.strip_fundus.chemins
-        if not chemins:
-            self.statusBar().showMessage("Aucune image chargée.")
-            return
+    # ── Points d'entrée publics ─────────────────────────────────────────
 
+    def save(self):
+        """Sauvegarde l'image courante dans un nouveau projet _OVP."""
+        if not self.chemin_image:
+            self.statusBar().showMessage("Aucune image à enregistrer.")
+            return
         if self.chemin_dossier is None:
             StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
             return
 
-        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du nouveau projet :')
-        if not ok or not sauv_fichier.strip(): 
+        chemin_config = os.path.join(os.path.dirname(self.path_image_courante), "config_segmentation.json")
+        if not self._check_config_existante(chemin_config):
             return
 
-        messageBox = StyledMessageBox(self)
-        messageBox.setWindowTitle("Sauvegarde des images")
-        messageBox.setText("Voulez-vous un dossier par image (1) ou un dossier pour toutes les images (2) ?")
-        btn_QAS = messageBox.addButton("1", QMessageBox.ActionRole)
-        btn_QSS = messageBox.addButton("2", QMessageBox.ActionRole)
-        messageBox.addButton(QMessageBox.Cancel)
-        messageBox.exec()
+        _base = os.path.splitext(os.path.basename(self.chemin_image))[0]
+        while _base.endswith("_OVP"):
+            _base = _base[:-4]
+        nom_ovp = f"{_base}_OVP"
+        try:
+            dossier_projet = self._save_une_image(self.chemin_image, self.chemin_dossier)
 
-        if messageBox.clickedButton() not in (btn_QAS, btn_QSS):
-            return
+            if self.segmentation_window:
+                data_seg = self.segmentation_window.recup_image()
+                config_dest = os.path.join(dossier_projet, "fundus_images", "config_segmentation.json")
+                with open(config_dest, 'w', encoding='utf-8') as f:
+                    json.dump(data_seg, f, indent=4)
 
-        dossier_dest = self.chemin_dossier
-        nb      = len(chemins)
-        erreurs = []
+            csv_src = os.path.join(self.chemin_dossier, "mesures.csv")
+            if os.path.exists(csv_src):
+                shutil.move(csv_src, os.path.join(dossier_projet, "results", f"{nom_ovp}_mesures.csv"))
 
-        if messageBox.clickedButton() == btn_QAS:
-            # --- Un dossier nomimage_OVP/ par image ---
-            for i, chemin in enumerate(chemins):
-                self.statusBar().showMessage(f"Sauvegarde {i + 1}/{nb} — {os.path.basename(chemin)}…")
-                QApplication.processEvents()
-                try:
-                    self._save_une_image(chemin, dossier_dest)
-                except Exception as e:
-                    erreurs.append(f"{os.path.basename(chemin)} : {e}")
-
-        else:
-            # --- Sous-question : tous les rendus ou seulement les modifiés ? ---
-            msgRendu = StyledMessageBox(self)
-            msgRendu.setWindowTitle("Rendus finaux")
-            msgRendu.setText("Voulez-vous exporter tous les rendus (tous) ou seulement les images modifiées (modifiées)?")
-            btn_tous_rendus  = msgRendu.addButton("Tous", QMessageBox.ActionRole)
-            btn_modif_rendus = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
-            msgRendu.addButton(QMessageBox.Cancel)
-            msgRendu.exec()
-
-            if msgRendu.clickedButton() not in (btn_tous_rendus, btn_modif_rendus):
-                return
-
-            exporter_tous_rendus = msgRendu.clickedButton() == btn_tous_rendus
-
-            # --- Tout dans un seul dossier plat ---
-            dossier_base       = os.path.join(dossier_dest, f"{sauv_fichier}_fundus_images_code_OVP")
-            dossier_fundus     = os.path.join(dossier_base, "fundus_images")
-            dossier_fundus_seg = os.path.join(dossier_base, "fundus_rendu_images_finales")
-            dossier_result     = os.path.join(dossier_base, "results")
-
-            os.makedirs(dossier_fundus,     exist_ok=True)
-            os.makedirs(dossier_fundus_seg, exist_ok=True)
-            os.makedirs(dossier_result,     exist_ok=True)
-
-            for i, chemin in enumerate(chemins):
-                self.statusBar().showMessage(f"Sauvegarde {i + 1}/{nb} — {os.path.basename(chemin)}…")
-                QApplication.processEvents()
-                try:
-                    nom_base  = os.path.splitext(os.path.basename(chemin))[0]
-                    nom_ovp   = f"{nom_base}_OVP"
-                    extension = os.path.splitext(chemin)[1]
-
-                    # Image originale
-                    shutil.copy(chemin, os.path.join(dossier_fundus, f"{nom_ovp}{extension}"))
-
-                    # Rendu fusionné selon le choix
-                    a_ete_modifie = chemin in self.config_par_image
-                    if exporter_tous_rendus or a_ete_modifie:
-                        image_fusionnee = self._generer_rendu_pour(chemin)
-                        if image_fusionnee:
-                            image_fusionnee.save(os.path.join(dossier_fundus_seg, f"{nom_ovp}_rendu.png"))
-
-                    # Config JSON de la segmentation
-                    config_image = self.config_par_image.get(chemin)
-                    if config_image:
-                        with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
-                            json.dump(config_image, f, indent=4, default=str)
-                    elif chemin == self.chemin_image and self.segmentation_window:
-                        data_seg = self.segmentation_window.recup_image()
-                        with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
-                            json.dump(data_seg, f, indent=4)
-
-                    # Masques binarisés
-                    paths = images_paths(chemin)
-                    for chemin_mask, nom_calque in [(paths[1], "veins"), (paths[2], "arteries"), (paths[3], "od")]:
-                        if os.path.exists(chemin_mask):
-                            mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
-                            if mask_brut is not None:
-                                _, mask_bin = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
-                                sous_dossier = os.path.join(dossier_base, "segmentation_masks", nom_calque)
-                                os.makedirs(sous_dossier, exist_ok=True)
-                                cv2.imwrite(os.path.join(sous_dossier, f"{nom_ovp}.png"), mask_bin)
-
-                    # Mesures spécifiques à cette image
- 
-
-                except Exception as e:
-                    erreurs.append(f"{os.path.basename(chemin)} : {e}")
-            csv_source = os.path.join(self.chemin_dossier, "mesures.csv")
-            json_dir_source = os.path.join(self.chemin_dossier, "mesures_json")
-
-            if os.path.exists(csv_source):
-                # Utilise shutil.move pour "nettoyer" la racine
-                shutil.move(csv_source, os.path.join(dossier_result, "mesures_globales.csv"))
-                print("CSV global archivé.")
-
-            if os.path.exists(json_dir_source):
-                json_dir_dest = os.path.join(dossier_result, "mesures_json")
-                if os.path.exists(json_dir_dest): 
+            json_dir_src = os.path.join(self.chemin_dossier, "mesures_json")
+            if os.path.exists(json_dir_src):
+                json_dir_dest = os.path.join(dossier_projet, "results", "mesures_json")
+                if os.path.exists(json_dir_dest):
                     shutil.rmtree(json_dir_dest)
-                shutil.move(json_dir_source, json_dir_dest)
-                print("Dossier JSON archivé.")
-            dossier_dest = dossier_base
+                shutil.move(json_dir_src, json_dir_dest)
 
-        if erreurs:
-            StyledMessageBox.warning(self, "Sauvegarde partielle",
-                f"{nb - len(erreurs)}/{nb} images sauvegardées.\n\nErreurs :\n" + "\n".join(erreurs))
-        else:
-            self.statusBar().showMessage(f"{nb} images sauvegardées.")
-            StyledMessageBox.information(self, "Succès", f"{nb} images sauvegardées dans :\n{dossier_dest}")
-    
+            self.statusBar().showMessage(f"Projet « {nom_ovp} » enregistré.")
+            StyledMessageBox.information(self, "Succès", f"Projet créé :\n{dossier_projet}")
+        except Exception as e:
+            StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
+
+    def _save_image_courante(self):
+        """Sauvegarde uniquement l'image affichée (choix du dossier libre)."""
+        chemin_config = os.path.join(os.path.dirname(self.path_image_courante), "config_segmentation.json")
+        if not self._check_config_existante(chemin_config):
+            return
+
+        dossier_dest = QFileDialog.getExistingDirectory(self, "Choisir le dossier de destination")
+        if not dossier_dest:
+            return
+
+        try:
+            dossier_projet = self._save_une_image(self.chemin_image, dossier_dest)
+            self.statusBar().showMessage("Image sauvegardée.")
+            StyledMessageBox.information(self, "Succès", f"Image sauvegardée :\n{dossier_projet}")
+        except Exception as e:
+            StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
+
+    def _save_toutes_images(self):
+        self._save_groupe(self.image_strip.strip_fundus.chemins)
+
+    def _save_images_selectionnees(self):
+        chemins = self.image_strip.strip_fundus.chemins_selectionnes()
+        if not chemins:
+            StyledMessageBox.information(self, "Sélection vide",
+                "Aucune image sélectionnée.\nCliquez sur des miniatures pour en cocher.")
+            return
+        self._save_groupe(chemins)
+
     def closeEvent(self, event):
         """Sauvegarde la config de toutes les images modifiées avant de quitter."""
         for chemin, config in self.config_par_image.items():
@@ -1948,7 +1850,6 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"[WARN] Impossible d'écrire {chemin_json} : {e}")
         
-        # Sauvegarder aussi l'image courante (au cas où elle n'est pas encore dans config_par_image)
         self.sauvegarder_config()
         super().closeEvent(event)
 
