@@ -75,10 +75,35 @@ class MesuresToolbox(QDockWidget):
         border-radius: 4px;
         padding: 3px 10px;
         font-size: 11px;
-    }    """
+    }
+    
+    /* --- STYLE ALIGNÉ SUR LES COMPOSANTS DE CONTRÔLE (OPACITÉ) --- */
+    QScrollBar:vertical {
+        border: none;
+        background: #2e2e3a;          /* Fond sombre identique aux boîtes d'outils */
+        width: 8px;                   /* Très fin et minimaliste */
+        margin: 0px;
+    }
+    QScrollBar::handle:vertical {
+        background: #ffffff;          /* La poignée reste blanche */
+        min-height: 30px;
+        border-radius: 4px;           /* Coins bien arrondis */
+    }
+    QScrollBar::handle:vertical:hover {
+        background: #e0e0e0;          /* Devient gris très clair au survol */
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        background: none;             /* Pas de flèches */
+        height: 0px;
+    }
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+        background: none;
+    }
+    """
     
     def __init__(self, parent=None):
         super().__init__("  MESURES", parent)
+        self.chemin_json_courant = None
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.setFeatures(
             QDockWidget.DockWidgetMovable |
@@ -87,9 +112,6 @@ class MesuresToolbox(QDockWidget):
         )
         self.setMinimumWidth(210)
         self.setStyleSheet(self.TOOLBOX_STYLE)
-
-        # Données de l'image courante (injectées par ff2.py via afficher_donnees)
-        self.data_courante = None
 
         root = QWidget()
         root.setStyleSheet("background: #f4fbf6;")
@@ -116,8 +138,8 @@ class MesuresToolbox(QDockWidget):
         self.cb_zoneA   = QCheckBox("Zone A")
         self.cb_zoneB   = QCheckBox("Zone B")
         self.cb_zoneC   = QCheckBox("Zone C")
-        self.cb_zoneAll = QCheckBox("Toutes les zones")
-        self.cb_zoneOut = QCheckBox("Hors zones")
+        self.cb_zoneAll = QCheckBox("All")
+        self.cb_zoneOut = QCheckBox("Out")
         zone_cbs = [self.cb_zoneA, self.cb_zoneB, self.cb_zoneC, self.cb_zoneAll, self.cb_zoneOut]
 
         btn_tout = QPushButton("Tout")
@@ -133,13 +155,12 @@ class MesuresToolbox(QDockWidget):
                                       extra_buttons=[btn_tout, btn_rien]))
 
         # Groupes d'actions
-        self.cb_secteur       = QCheckBox("Secteurs")
-        self.cb_cal_diam   = QCheckBox("Calibre + diametre")
-        self.cb_topologie  = QCheckBox("Topologie")
-        self.cb_tortuosite = QCheckBox("Tortuosite")
-        self.cb_pts_crit   = QCheckBox("Points critiques")
-        groupes_cbs = [self.cb_secteur, self.cb_cal_diam,
-                       self.cb_topologie, self.cb_tortuosite, self.cb_pts_crit]
+        self.cb_quality      = QCheckBox("quality control")
+        self.cb_vessel   = QCheckBox("vessel detection")
+        self.cb_geo  = QCheckBox("geometric metrics")
+
+        groupes_cbs = [self.cb_quality, self.cb_vessel,
+                       self.cb_geo]
         btn_tout2 = QPushButton("Tout")
         btn_tout2.setObjectName("btn_tout")
         btn_rien2 = QPushButton("Rien")
@@ -218,8 +239,8 @@ class MesuresToolbox(QDockWidget):
         return [
             self.cb_veines, self.cb_arteres, self.cb_les2,
             self.cb_zoneA, self.cb_zoneB, self.cb_zoneC, self.cb_zoneAll, self.cb_zoneOut,
-            self.cb_secteur, self.cb_cal_diam,
-            self.cb_topologie, self.cb_tortuosite, self.cb_pts_crit,
+            self.cb_quality, self.cb_vessel,
+            self.cb_geo
         ]
 
     def set_enabled(self, enabled):
@@ -253,19 +274,11 @@ class MesuresToolbox(QDockWidget):
 
         groupes = []
         
-        if self.cb_secteur.isChecked():    groupes.append("Secteurs")
-        if self.cb_cal_diam.isChecked():   groupes.append("Calibre")
-        if self.cb_topologie.isChecked():  groupes.append("Topologie")
-        if self.cb_tortuosite.isChecked(): groupes.append("Tortuosite")
-        if self.cb_pts_crit.isChecked():   groupes.append("Points_critiques")
+        if self.cb_quality.isChecked():    groupes.append("quality control")
+        if self.cb_vessel.isChecked():   groupes.append("vessel detection")
+        if self.cb_geo.isChecked():  groupes.append("geometric metrics")
 
         return vaisseaux, zones, groupes
-
-    def afficher_donnees(self, data: dict):
-        """Reçoit les données de l'image courante depuis ff2.py et les stocke."""
-        self.data_courante = data
-        self.tree.clear()  # Vide l'affichage précédent
-        self.show()
 
     def lancer_mesures(self):
         vaisseaux, zones, groupes = self.selections()
@@ -275,80 +288,70 @@ class MesuresToolbox(QDockWidget):
                                 "Cochez au moins un élément dans chaque groupe.")
             return
 
-        # Utiliser data_courante si disponible, sinon fallback sur data.json
-        if self.data_courante:
-            data_test = self.data_courante
-        else:
-            try:
-                with open('data.json', 'r') as f:
-                    data_test = json.load(f)
-            except FileNotFoundError:
-                QMessageBox.critical(self, "Erreur",
-                    "Aucune mesure disponible pour cette image.\n"
-                    "Lancez d'abord les mesures depuis le panneau de segmentation.")
-                return
+        if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
+            QMessageBox.critical(self, "Erreur",
+                "Aucune mesure disponible pour cette image.\n"
+                "Lancez d'abord les mesures.")
+            return
 
-        try:
-            resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+
+        
+        try :    
+            with open(self.chemin_json_courant, 'r', encoding='utf-8') as f:
+                data_test = json.load(f)
+
+
+                resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+
+
 
             if resultat:
                 self.remplir_interface(resultat)
 
-            return resultat
-
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du filtrage : {str(e)}")
+             QMessageBox.critical(self, "Erreur", f"Erreur : {str(e)}")
+    
+    def appliquer_langue(self, T: dict):
+        """Met à jour tous les textes de la toolbox mesures."""
+        self.setWindowTitle(T["mes_titre"])
+ 
+        self.cb_veines.setText(T["mes_cb_veines"])
+        self.cb_arteres.setText(T["mes_cb_arteres"])
+        self.cb_les2.setText(T["mes_cb_les2"])
+ 
+        self.cb_quality.setText(T["mes_cb_quality"])
+        self.cb_vessel.setText(T["mes_cb_vessel"])
+        self.cb_geo.setText(T["mes_cb_geo"])
+ 
+        self.btn_lancer.setText(T["mes_btn_afficher"])
+        self.btn_export.setText(T["mes_btn_exporter"])
+ 
+        self.tree.setHeaderLabels([T["mes_tree_col_prop"], T["mes_tree_col_val"]])
 
-    def exporter_resultats(self):
-        vaisseaux, zones, groupes = self.selections()
-
-        # Utiliser data_courante si disponible, sinon fallback sur data.json
-        if self.data_courante:
-            data_test = self.data_courante
-        else:
-            try:
-                with open('data.json', 'r') as f:
-                    data_test = json.load(f)
-            except FileNotFoundError:
-                QMessageBox.critical(self, "Erreur",
-                    "Aucune mesure disponible pour cette image.\n"
-                    "Lancez d'abord les mesures depuis le panneau de segmentation.")
-                return
-
-        try:
-            resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
-
-            if not resultat:
-                QMessageBox.warning(self, "Export impossible",
-                    "Aucune donnée à exporter. Lancez d'abord une mesure.")
-                return
-
-            chemin_save, _ = QFileDialog.getSaveFileName(
-                self, "Enregistrer le rapport", "rapport_mesures.txt", "Fichiers Texte (*.txt)"
-            )
-
-            if chemin_save:
-                rc.export_txt(resultat, chemin_save)
-                QMessageBox.information(self, "Export réussi",
-                    f"Le rapport a été enregistré ici :\n{chemin_save}")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur Export", f"Une erreur est survenue : {str(e)}")
-
+        
     def remplir_interface(self, data):
         """Remplit le QTreeWidget avec les données filtrées."""
+        if not isinstance(data, dict):
+            print("Erreur : remplir_interface a reçu des données invalides.")
+            return
+
         self.tree.clear()
+
+        image_id = data.get("IMAGE_ID", "Inconnue")
+        QTreeWidgetItem(self.tree, ["IMAGE ANALYSÉE", str(image_id)])
         
         for organe, zones in data.items():
-            # Branche Organe (ARTERIES / VEINS)
+            if organe == "IMAGE_ID" or not isinstance(zones, dict):
+                continue
+            
             item_organe = QTreeWidgetItem(self.tree, [organe.upper()])
             
             for zone, groupes in zones.items():
-                # Branche Zone (Zone A, B...)
+                if not isinstance(groupes, dict): continue
+                
                 item_zone = QTreeWidgetItem(item_organe, [f"Zone {zone}"])
                 
                 for groupe, mesures in groupes.items():
-                    # Branche Groupe (Calibre, Secteurs...)
                     item_groupe = QTreeWidgetItem(item_zone, [groupe])
                     
                     if isinstance(mesures, dict):
@@ -356,10 +359,76 @@ class MesuresToolbox(QDockWidget):
                             if isinstance(valeur, dict):
                                 item_sub = QTreeWidgetItem(item_groupe, [mesure])
                                 for sub_m, sub_v in valeur.items():
-                                    v_str = f"{sub_v}" if isinstance(sub_v, float) else str(sub_v)
+                                    v_str = f"{sub_v:.2f}" if isinstance(sub_v, float) else str(sub_v)
                                     QTreeWidgetItem(item_sub, [sub_m, v_str])
                             else:
-                                v_str = f"{valeur}" if isinstance(valeur, float) else str(valeur)
+                                v_str = f"{valeur:.2f}" if isinstance(valeur, float) else str(valeur)
                                 QTreeWidgetItem(item_groupe, [mesure, v_str])
         
         self.tree.expandAll()
+
+    def exporter_resultats(self):
+        vaisseaux, zones, groupes = self.selections()
+
+        msgBox = QMessageBox(self)
+        msgBox.setWindowTitle("Export des mesures")
+        msgBox.setText("Que voulez-vous exporter ?")
+        btn_cette = msgBox.addButton("Cette image", QMessageBox.ActionRole)
+        btn_toutes = msgBox.addButton("Toutes les images", QMessageBox.ActionRole)
+        msgBox.addButton(QMessageBox.Cancel)
+        msgBox.exec()
+
+        if msgBox.clickedButton() not in (btn_cette, btn_toutes):
+            return
+
+        chemin_save, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le rapport", "rapport_mesures.txt", "Fichiers Texte (*.txt)"
+        )
+        if not chemin_save:
+            return
+
+        if msgBox.clickedButton() == btn_cette:
+            # Export image courante uniquement
+            if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
+                QMessageBox.warning(self, "Erreur", "Aucune mesure disponible pour cette image.")
+                return
+            try:
+                with open(self.chemin_json_courant, 'r', encoding='utf-8') as f:
+                    data_test = json.load(f)
+                resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+                if resultat:
+                    rc.export_txt(resultat, chemin_save)
+                    QMessageBox.information(self, "Export réussi", f"Rapport enregistré :\n{chemin_save}")
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur : {str(e)}")
+
+        else:
+            dossier_json = os.path.dirname(self.chemin_json_courant)
+            if not os.path.exists(dossier_json):
+                QMessageBox.warning(self, "Erreur", "Dossier des mesures introuvable.")
+                return
+
+            try:
+                with open(chemin_save, "w", encoding="utf-8") as f_out:
+                    for nom_fichier in sorted(os.listdir(dossier_json)):
+                        if not nom_fichier.endswith("_data.json"):
+                            continue
+                        chemin_json = os.path.join(dossier_json, nom_fichier)
+                        with open(chemin_json, 'r', encoding='utf-8') as f:
+                            data_test = json.load(f)
+                        resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
+                        if resultat:
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt',
+                                                            delete=False, encoding='utf-8') as tmp:
+                                tmp_path = tmp.name
+                            rc.export_txt(resultat, tmp_path)
+                            with open(tmp_path, 'r', encoding='utf-8') as tmp_f:
+                                f_out.write(tmp_f.read())
+                                f_out.write("\n")
+                            os.remove(tmp_path)
+
+                QMessageBox.information(self, "Export réussi",
+                    f"Rapport de toutes les images enregistré :\n{chemin_save}")
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur : {str(e)}")

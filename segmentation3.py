@@ -166,8 +166,9 @@ class SegmentationToolbox(QDockWidget):
     QPushButton:disabled { background: #bbbbcc; color: #888899; }
 
     /* Couleurs individuelles par objectName */
+    QPushButton#btn_creer_disque       { color: #000000; }
+
     QPushButton#btn_editer         { color: #000000; }
-    QPushButton#btn_editer:disabled { background: #bbbbcc; color: #888899; }
 
     QPushButton#btn_valider        { color: #000000;
 }
@@ -226,11 +227,13 @@ class SegmentationToolbox(QDockWidget):
         self.cb_disque  = QCheckBox("Disque optique")
 
         # Boutons d'action
+        self.btn_creer_disque = QPushButton("Créer un disque")
         self.btn_editer  = QPushButton("Éditer le disque")
-        self.btn_valider = QPushButton("Valider le disque")
+        self.btn_valider = QPushButton("Valider les disques")
         self.btn_lancer  = QPushButton("Lancer les mesures")
         self.btn_lancer.setEnabled(False)
 
+        self.btn_creer_disque.setObjectName("btn_creer_disque")
         self.btn_editer.setObjectName("btn_editer")
         self.btn_editer.setEnabled(False)
         self.btn_editer.setCheckable(True)
@@ -262,7 +265,7 @@ class SegmentationToolbox(QDockWidget):
 
         # Groupe couches
         self.main_layout.addWidget(self._groupe("Couches disponibles", [
-            self.cb_veines, self.cb_arteres, self.cb_disque,
+            self.cb_veines, self.cb_arteres, self.cb_disque,self.btn_creer_disque,
             self.btn_editer, self.btn_valider,
         ]))
 
@@ -293,6 +296,7 @@ class SegmentationToolbox(QDockWidget):
         self.cb_arteres.toggled.connect(self.update_ui)
         self.cb_disque.toggled.connect(self.update_ui)
 
+        self.btn_creer_disque.clicked.connect(self._on_creer_disque)
         self.btn_editer.clicked.connect(self._on_editer_disque)
         self.btn_valider.clicked.connect(self._on_valider_disque)
         self.btn_lancer.clicked.connect(self._on_lancer_mesures)
@@ -313,8 +317,15 @@ class SegmentationToolbox(QDockWidget):
 
         val_label = QLabel("50")
         val_label.setStyleSheet("color: #000000; background: #f4fbf6;")
+        # Connecter la mise à jour de val_label ET l'application des changements
         slider.valueChanged.connect(lambda v: val_label.setText(str(v)))
         slider.valueChanged.connect(self.appliquer)
+        # Optionnel : sauvegarder automatiquement quand on relâche le slider
+        slider.sliderReleased.connect(self._on_slider_released)
+        
+        if not hasattr(self, "val_labels"):
+            self.val_labels = {}
+        self.val_labels[key] = val_label
 
         container = QWidget()
         container.setStyleSheet("background: #f4fbf6;")
@@ -369,6 +380,7 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.setEnabled(veines)
         self.btn_couleur_arteres.setEnabled(arteres)
         self.btn_couleur_disque.setEnabled(disque)
+        self.btn_creer_disque.setEnabled(disque)
         self.btn_editer.setEnabled(disque)
         self.btn_valider.setEnabled(disque)
 
@@ -395,7 +407,9 @@ class SegmentationToolbox(QDockWidget):
 
     def modifier_couleurs(self, key: str):
         """Ouvre un QColorDialog pour la couche `key`."""
-        titre, default_qt_color = COLOR_CONFIG[key]
+        config = getattr(self, "_color_config_local", COLOR_CONFIG)
+        titre, default_qt_color = config[key]
+
         choix = QColorDialog.getColor(QColor(default_qt_color), self, titre)
         
         if not choix.isValid():
@@ -421,6 +435,14 @@ class SegmentationToolbox(QDockWidget):
         if parent and hasattr(parent, "modif_couleurs"):
             parent.modif_couleurs(key, color_modif)
 
+    def _on_creer_disque(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "creer_disque_optique"):
+            parent.creer_disque_optique()
+            self.cb_disque.setChecked(True)
+            self.update_ui()
+        else:
+            print("Erreur : le parent ne peut pas créer le disque")
     
     def _on_editer_disque(self):
         parent = self.parent()
@@ -432,9 +454,9 @@ class SegmentationToolbox(QDockWidget):
 
     def _on_valider_disque(self):
         rep = StyledMessageBox(self)
-        rep.setWindowTitle("Valider le disque optique")
-        rep.setText("Validation du disque optique")
-        rep.setInformativeText("Êtes-vous sûr de vouloir valider le disque optique ?")
+        rep.setWindowTitle("Valider des disques optiques")
+        rep.setText("Validation des disques optiques")
+        rep.setInformativeText("Les disques optiques du dossier sont-ils tous correctement positionnés ?")
         btn_oui= rep.addButton("Oui", QMessageBox.ActionRole)
         btn_non = rep.addButton("Non", QMessageBox.ActionRole)
         rep.exec()
@@ -449,6 +471,12 @@ class SegmentationToolbox(QDockWidget):
             parent.mesure()
         else:
             print("Erreur lors du lancement des mesures dans le main")
+    
+    def _on_slider_released(self):
+        """Notifie le parent de sauvegarder la config courante."""
+        parent = self.parent()
+        if parent and hasattr(parent, "sauvegarder_config"):
+            parent.sauvegarder_config()
     
     def hex_to_rgb(self,value):
         value = value.lstrip('#')
@@ -486,6 +514,8 @@ class SegmentationToolbox(QDockWidget):
                 self.sliders[key].blockSignals(True)
                 self.sliders[key].setValue(val)
                 self.sliders[key].blockSignals(False)
+                if hasattr(self, "val_labels") and key in self.val_labels:
+                    self.val_labels[key].setText(str(val))
 
         # Visibilités
         for cb, key in [(self.cb_veines, "veines"), (self.cb_arteres, "arteres"), (self.cb_disque, "disque")]:
@@ -505,6 +535,40 @@ class SegmentationToolbox(QDockWidget):
                 self._style_slider(slider, hex_color)
 
         self.update_ui()
+    
+    def appliquer_langue(self, T: dict):
+        """Met à jour tous les textes de la toolbox segmentation."""
+        self.setWindowTitle(T["seg_titre"])
+ 
+        # Checkboxes
+        self.cb_veines.setText(T["seg_cb_veines"])
+        self.cb_arteres.setText(T["seg_cb_arteres"])
+        self.cb_disque.setText(T["seg_cb_disque"])
+ 
+        # Boutons d'action
+        self.btn_creer_disque.setText(T["seg_btn_creer_disque"])
+        self.btn_editer.setText(T["seg_btn_editer"])
+        self.btn_valider.setText(T["seg_btn_valider"])
+        self.btn_lancer.setText(T["seg_btn_lancer"])
+ 
+        # Boutons couleur
+        self.btn_couleur_veines.setText(T["seg_btn_couleur_veines"])
+        self.btn_couleur_arteres.setText(T["seg_btn_couleur_arteres"])
+        self.btn_couleur_disque.setText(T["seg_btn_couleur_disque"])
+ 
+        # Groupes (QGroupBox)
+        self.groups["veines"].setTitle(T["seg_opacite_veines"])
+        self.groups["arteres"].setTitle(T["seg_opacite_arteres"])
+        self.groups["disque"].setTitle(T["seg_opacite_disque"])
+        self.groups["image"].setTitle(T["seg_opacite_image"])
+ 
+        # Mettre à jour COLOR_CONFIG pour les futurs dialogues couleur
+        self._color_config_local = {
+            "veines":  (T["seg_couleur_veines_titre"],  Qt.blue),
+            "arteres": (T["seg_couleur_arteres_titre"], Qt.red),
+            "disque":  (T["seg_couleur_disque_titre"],  Qt.green),
+        }
+
 
     @staticmethod
     def _hex_to_rgba(hex_color: str) -> tuple:

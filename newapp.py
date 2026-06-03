@@ -1,26 +1,34 @@
-# -*- coding: utf-8 -*-
 import sys
 import os
 import json
 import shutil
+import copy
+import glob 
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QScrollArea, QLabel, QFileDialog, QGraphicsScene,
-    QGraphicsView, QSizePolicy, QMessageBox, QGraphicsItem  # CORRECTION : QGraphicsItem ajouté
+    QGraphicsView, QSizePolicy, QMessageBox, QGraphicsItem, QInputDialog
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap, QIcon, QPainter, QAction  # CORRECTION : QAction ajouté
+
+import struct
 from PySide6 import QtGui
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap, QIcon, QPainter, QAction  ,QImage, QColor
 
 import opacite as op
-import mesures_box as mb          # CORRECTION : renommé mb pour correspondre à l'usage dans le code
+import mesures_box as mb          
 import plein_ecran as pe
 import segmentation3 as seg
-import measurements2 as m_script
+import measurements as m_script
 import read_csv as rc
 from chargement_images import load_images, images_paths
 from affichage_images import conversion_qpixmap
+import cv2
+from langue import changement_langue, LANGUE_DEFAUT
+
+from PIL import Image, ImageDraw
+import numpy as np 
 
 
 BG    = "#000000"  # Fond app : noir pur
@@ -107,6 +115,7 @@ class ImageStrip(QWidget):
 
     image_selectionnee = Signal(str)
     index_change = Signal(int)
+    selection_changed = Signal(list)   # émet la liste des chemins sélectionnés
 
     STRIP_STYLE = """
         QWidget#strip_container { background-color: #141414; }
@@ -138,13 +147,14 @@ class ImageStrip(QWidget):
         self.chemins = []
         self.boutons = []
         self.index_courant = -1
+        self.mode_selection = False          # True = sélection multiple active
+        self.indices_selectionnes = set()    # indices des images cochées
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
-        # CORRECTION : boutons flèches créés ici (ils étaient utilisés dans _maj_fleches
-        #              mais jamais instanciés, ce qui causait un AttributeError au démarrage)
+
         self.btn_gauche = QPushButton("‹")
         self.btn_gauche.setFixedSize(28, 80)
         self.btn_gauche.setStyleSheet(self.BTN_FLECHE_STYLE)
@@ -178,6 +188,7 @@ class ImageStrip(QWidget):
 
     def charger_dossier(self, dossier):
         """Scanne le dossier et affiche les miniatures."""
+        
         self.chemins = sorted([
             os.path.join(dossier + "/fundus_images", f)
             for f in os.listdir(dossier + "/fundus_images")
@@ -198,6 +209,7 @@ class ImageStrip(QWidget):
             btn.setParent(None)
         self.boutons.clear()
         self.index_courant = -1
+        self.indices_selectionnes.clear()
  
         for i, chemin in enumerate(choix):
             pixmap = QPixmap(chemin).scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -220,18 +232,17 @@ class ImageStrip(QWidget):
             btn.setIcon(QIcon(pixmap))
             btn.setIconSize(pixmap.size())
             btn.setToolTip(os.path.basename(chemin))
-            btn.setStyleSheet(self._style_miniature(False))
- 
+            btn.setStyleSheet(self._style_miniature(False, False))
+
             idx = i
-            btn.clicked.connect(lambda _, j=idx: self._selectionner(j))
+            btn.clicked.connect(lambda _, j=idx: self._on_miniature_cliquee(j))
             self.strip_layout.insertWidget(i, btn)
             self.boutons.append(btn)
  
     @staticmethod
     def _superposer_masque(pixmap_base: QPixmap, chemin_masque: str) -> QPixmap:
         """Superpose le masque OD colorisé en vert sur la miniature."""
-        from PySide6.QtGui import QImage, QColor
-        import struct
+
 
         masque_img = QImage(chemin_masque).scaled(
             pixmap_base.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
@@ -258,13 +269,38 @@ class ImageStrip(QWidget):
 
         return resultat
 
+    def _on_miniature_cliquee(self, index):
+        """Dispatch : coche/décoche en mode sélection, sinon affiche l'image."""
+        if self.mode_selection:
+            self._toggle_selection(index)
+        else:
+            self._selectionner(index)
+
+    def activer_mode_selection(self, actif: bool):
+        """Active ou désactive le mode sélection multiple.
+        À l'activation, toutes les images sont cochées par défaut."""
+        self.mode_selection = actif
+        if actif:
+            self.indices_selectionnes = set()
+            for i, btn in enumerate(self.boutons):
+                est_courant = (i == self.index_courant)
+                btn.setStyleSheet(self._style_miniature(est_courant, False))
+        else:
+            self.indices_selectionnes.clear()
+            for i, btn in enumerate(self.boutons):
+                est_courant = (i == self.index_courant)
+                btn.setStyleSheet(self._style_miniature(est_courant, False))
+        self.selection_changed.emit(self.chemins_selectionnes())
+
     def _selectionner(self, index):
         # Désélectionner le précédent
         if 0 <= self.index_courant < len(self.boutons):
-            self.boutons[self.index_courant].setStyleSheet(self._style_miniature(False))
+            est_coche = self.index_courant in self.indices_selectionnes
+            self.boutons[self.index_courant].setStyleSheet(self._style_miniature(False, est_coche))
 
         self.index_courant = index
-        self.boutons[index].setStyleSheet(self._style_miniature(True))
+        est_coche = index in self.indices_selectionnes
+        self.boutons[index].setStyleSheet(self._style_miniature(True, est_coche))
 
         # Scroller pour rendre visible
         self.scroll.ensureWidgetVisible(self.boutons[index])
@@ -272,6 +308,25 @@ class ImageStrip(QWidget):
         self._maj_fleches()
         self.image_selectionnee.emit(self.chemins[index])
         self.index_change.emit(index)
+
+    def _toggle_selection(self, index):
+        """Coche/décoche une miniature via clic droit (sélection multiple)."""
+        if index in self.indices_selectionnes:
+            self.indices_selectionnes.discard(index)
+        else:
+            self.indices_selectionnes.add(index)
+
+        est_courant = (index == self.index_courant)
+        est_coche   = (index in self.indices_selectionnes)
+        self.boutons[index].setStyleSheet(self._style_miniature(est_courant, est_coche))
+        self.selection_changed.emit(self.chemins_selectionnes())
+
+    def chemins_selectionnes(self):
+        """Retourne la liste des chemins des images cochées."""
+        return [self.chemins[i] for i in sorted(self.indices_selectionnes)]
+
+    def nb_selectionnes(self):
+        return len(self.indices_selectionnes)
 
     def _precedent(self):
         if self.index_courant > 0:
@@ -291,9 +346,16 @@ class ImageStrip(QWidget):
             self._selectionner(self.chemins.index(chemin))
 
     @staticmethod
-    def _style_miniature(selected: bool) -> str:
-        border_color = "#ffffff" if selected else "transparent"
-        bg_color     = "#2a2a2a" if selected else "#1e1e1e"
+    def _style_miniature(selected: bool, checked: bool = False) -> str:
+        if checked:
+            border_color = "#00cc55"   # vert = coché pour export
+            bg_color     = "#0d2b1a"
+        elif selected:
+            border_color = "#ffffff"
+            bg_color     = "#2a2a2a"
+        else:
+            border_color = "transparent"
+            bg_color     = "#1e1e1e"
         return f"""
             QPushButton {{
                 border: 2px solid {border_color};
@@ -386,7 +448,8 @@ class MainWindow(QMainWindow):
         self.chemin_image = None
         self.path_image_courante = None
         self.list_paths = None
-
+        self.langue_courante = LANGUE_DEFAUT          # "fr" ou "en"
+        self.T = changement_langue(self.langue_courante)  # dictionnaire actif
         # Couleurs par défaut des masques
         self.couleurs_defaut = {
             "veines":  (0,   0,   255, 255),
@@ -433,12 +496,10 @@ class MainWindow(QMainWindow):
         self.segmentation_window = None
         self.toolbox = None
 
-        # CORRECTION : actAfficherToolbox créé ici (il était utilisé dans tableau_seg
-        #              et _init_toolbox mais jamais défini, causant un AttributeError)
+        
         self.actAfficherToolbox = QAction("Afficher la toolbox", self)
         self.actAfficherToolbox.setCheckable(True)
 
-        # CORRECTION : actEditerDisque créé ici (utilisé dans edit_disque_optique)
         self.actEditerDisque = QAction("Éditer le disque optique", self)
         self.actEditerDisque.setCheckable(True)
         self.actEditerDisque.triggered.connect(self.edit_disque_optique)
@@ -450,17 +511,22 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # Page d'accueil
+        self.btn_container = None
+
         # Barre du haut avec bouton dossier
-        topbar = QWidget()
-        topbar.setFixedHeight(48)
-        topbar.setStyleSheet(f"background: {PANEL}; border-bottom: 1px solid #2a2a2a;")
-        top_layout = QHBoxLayout(topbar)
+        self.topbar = QWidget()
+        self.topbar.setFixedHeight(48)
+        self.topbar.setStyleSheet(f"background: {PANEL}; border-bottom: 1px solid #2a2a2a;")
+        top_layout = QHBoxLayout(self.topbar)
         top_layout.setContentsMargins(16, 0, 16, 0)
 
         lbl_titre = QLabel("OPTIC VISION PRO")
         lbl_titre.setStyleSheet("font-size: 13px; font-weight: bold; color: #c8c8ff; letter-spacing: 2px;")
+        lbl_titre.setCursor(Qt.PointingHandCursor)  
+        lbl_titre.mousePressEvent = lambda event: self.retourner_accueil()
 
-        self.dossier_travail = QPushButton("📂  Ouvrir un dossier de travail")
+        self.dossier_travail = QPushButton("Ouvrir un dossier de travail")
         self.dossier_travail.setFixedHeight(32)
         self.dossier_travail.setStyleSheet("""
             QPushButton {
@@ -473,7 +539,7 @@ class MainWindow(QMainWindow):
         self.dossier_travail.clicked.connect(self.charger_dossier_travail)
 
 
-        self.btn_dossier = QPushButton("📂  Ouvrir un dossier d'images")
+        self.btn_dossier = QPushButton("Ouvrir un dossier d'images")
         self.btn_dossier.setFixedHeight(32)
         self.btn_dossier.setStyleSheet("""
             QPushButton {
@@ -515,24 +581,203 @@ class MainWindow(QMainWindow):
         self.image_strip = ImageStripContainer()
         self.image_strip.hide()
         self.image_strip.image_selectionnee.connect(self._charger_image)
+        self.image_strip.strip_fundus.selection_changed.connect(self._on_selection_changed)
 
-        layout.addWidget(topbar)
+        layout.addWidget(self.topbar)
         layout.addWidget(self.actionbar)
         layout.addWidget(self.lbl_placeholder, stretch=1)
         layout.addWidget(self.vue, stretch=1)
         self.vue.hide()
         layout.addWidget(self.image_strip)
+
+        self._init_accueil()
+        self.dossier_travail.setEnabled(False)
+        self.btn_dossier.setEnabled(False)
+
+        self.initial_pos = None
+        self.topbar.hide()
+
+
+
+    def _init_accueil(self):
+        """Affiche la page d'accueil ."""
+        self.btn_container = QWidget()
+        container_layout = QVBoxLayout(self.btn_container)
+        container_layout.setContentsMargins(40, 40, 40, 40)
+        container_layout.setSpacing(20)
+        container_layout.setAlignment(Qt.AlignCenter)
+
+        # Logo
+        self.logo = QLabel(self.btn_container)
+        logo_pixmap = QPixmap("OPV3.png")
+        ecran = QApplication.primaryScreen().availableGeometry()
+        logo_pixmap = logo_pixmap.scaled(
+            ecran.height() // 2, ecran.width() // 2,
+            Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self.logo.setPixmap(logo_pixmap)
+        self.logo.setAlignment(Qt.AlignCenter)
+
+        # Bouton langue
+        self.btn_langue = QPushButton(self.T["btn_langue"])
+        self.btn_langue.setFixedSize(100, 32)
+        self.btn_langue.setStyleSheet("""
+            QPushButton {
+                font-size: 12px; font-weight: bold;
+                border-radius: 16px;
+                background-color: #333333;
+                color: #ffffff;
+                padding: 4px 12px;
+            }
+            QPushButton:hover { background-color: #555555; }
+        """)
+        self.btn_langue.clicked.connect(self._basculer_langue)
+
+
+        # Boutons
+        btn_row = QWidget()
+        btn_layout = QHBoxLayout(btn_row)
+        btn_layout.setSpacing(20)
+        btn_layout.setAlignment(Qt.AlignCenter)
+
+        self.btn_pretraitement = QPushButton(self.T["btn_pretraitement"])
+        self.btn_pretraitement.setFixedSize(200, 50)
+        self.btn_pretraitement.setStyleSheet(self._style_accueil_btn())
+
+        self.btn_traitement = QPushButton(self.T["btn_traitement"])
+        self.btn_traitement.setFixedSize(200, 50)
+        self.btn_traitement.setStyleSheet(self._style_accueil_btn())
+        self.btn_traitement.clicked.connect(self._on_traitement_clicked)
+
+        btn_layout.addWidget(self.btn_pretraitement)
+        btn_layout.addWidget(self.btn_traitement)
+
+        container_layout.addWidget(self.btn_langue, alignment=Qt.AlignRight)
+        container_layout.addWidget(self.logo)
+        container_layout.addWidget(btn_row)
+
+        # Insérer avant le placeholder
+        self.centralWidget().layout().insertWidget(1, self.btn_container)
+        self.lbl_placeholder.hide()
+        
+    def retourner_accueil(self):
+        """Retourne à la page d'accueil, en réinitialisant l'état."""
+        self.scene.clear()
+        self.item_fundus = None
+        self.item_veins = None
+        self.item_arteries = None
+        self.item_od = None
+
+        if self.segmentation_window:
+            self.segmentation_window.hide()
+        if self.toolbox:
+            self.toolbox.hide()
+
+        self.lbl_placeholder.show()
+        self.vue.hide()
+        self.actionbar.hide()
+        self.image_strip.hide()
+        self.topbar.hide()
+
+        if self.btn_container:
+            self.btn_container.show()
+
+        # Réinitialiser les chemins et configs
+        self.lbl_placeholder.hide()
+        self.chemin_courant = None
+        self.chemin_image = None
+        self.path_image_courante = None
+        self.list_paths = None
+
+    def _basculer_langue(self):
+            """Alterne entre français et anglais et met à jour toute l'interface."""
+            self.langue_courante = "en" if self.langue_courante == "fr" else "fr"
+            self.T = changement_langue(self.langue_courante)
+            self._appliquer_langue()
+
+    def _appliquer_langue(self):
+        """Met à jour tous les textes statiques de l'interface avec self.T."""
+        T = self.T
+ 
+        # --- Bouton langue (accueil) ---
+        if hasattr(self, "btn_langue"):
+            self.btn_langue.setText(T["btn_langue"])
+ 
+        # --- Boutons accueil ---
+        if hasattr(self, "btn_pretraitement"):
+            self.btn_pretraitement.setText(T["btn_pretraitement"])
+        if hasattr(self, "btn_traitement"):
+            self.btn_traitement.setText(T["btn_traitement"])
+ 
+        # --- Barre haute ---
+        self.dossier_travail.setText(T["btn_dossier_travail"])
+        self.btn_dossier.setText(T["btn_dossier_images"])
+ 
+        # --- Barre d'actions ---
+        self.btn_precedent.setText(T["btn_precedent"])
+        self.btn_suivant.setText(T["btn_suivant"])
+        self.btn_exporter.setText(T["btn_sauvegarder"])
+        self.btn_exporter_tous.setText(T["btn_sauvegarder_tout"])
+ 
+        # --- Placeholder ---
+        self.lbl_placeholder.setText(T["placeholder"])
+ 
+        # --- Toolbox segmentation ---
+        if self.segmentation_window is not None:
+            self.segmentation_window.appliquer_langue(T)
+ 
+        # --- Toolbox mesures ---
+        if self.toolbox is not None:
+            self.toolbox.appliquer_langue(T)
+ 
+        # --- Titre fenêtre (si une image est chargée) ---
+        if self.chemin_courant:
+            n   = self.index_courant + 1
+            tot = len(self.image_strip.strip_fundus.chemins)
+            self.lbl_image_num.setText(T["lbl_image_num"].format(n=n, total=tot))
+
+
+
+    @staticmethod
+    def _style_accueil_btn():
+        return """
+            QPushButton {
+                font-size: 13px;
+                font-weight: bold;
+                border-radius: 25px;
+                background-color: #ffffff;
+                color: #000000;
+                padding: 10px 20px;
+            }
+            QPushButton:hover {
+                background-color: #666666;
+                color: white;
+            }
+            QPushButton:pressed {
+                background-color: #555555;
+            }
+        """
+
+    def _on_traitement_clicked(self):
+        """Cache l'accueil et affiche l'interface principale."""
+        if self.btn_container:
+            self.btn_container.hide()
+        self.lbl_placeholder.show()
+        self.dossier_travail.setEnabled(True)
+        self.btn_dossier.setEnabled(True)
+        self.statusBar().showMessage(self.T["status_etape1"])
+        self.topbar.show()
         
     def charger_dossier_travail(self):
         if self.chemin_dossier is None:
-            chemin_dossier = QFileDialog.getExistingDirectory(self, "Choisir un dossier de travail", os.getcwd())
+            chemin_dossier = QFileDialog.getExistingDirectory(self, self.T["btn_dossier_travail"], os.getcwd())
             if chemin_dossier:
                     # Logique pour charger les données du dossier
-                StyledMessageBox.information(self, "Dossier chargé", f"Dossier '{chemin_dossier}' chargé avec succès.")
+                StyledMessageBox.information(self, self.T["dlg_dossier_titre"], self.T["dlg_dossier_texte"].format(nom=chemin_dossier))
                 self.chemin_dossier = chemin_dossier
                 print(self.chemin_dossier)
             else:
-                StyledMessageBox.warning(self, "Erreur", "Aucun dossier sélectionné.")
+                StyledMessageBox.warning(self, self.T["dlg_dossier_erreur_titre"], self.T["dlg_dossier_erreur_texte"])
                 print(self.chemin_dossier)
         else:
             self.reset("de dossier")
@@ -559,7 +804,7 @@ class MainWindow(QMainWindow):
         return (r, g, b, 255)
 
     def _ouvrir_dossier(self):
-        dossier = QFileDialog.getExistingDirectory(self, "Choisir un dossier d'images")
+        dossier = QFileDialog.getExistingDirectory(self, self.T["btn_dossier_images"])
         if not dossier:
             return
 
@@ -567,7 +812,7 @@ class MainWindow(QMainWindow):
 
         nb = len(self.image_strip.strip_fundus.chemins)
         if nb == 0:
-            self.lbl_info.setText("Aucune image trouvée dans ce dossier")
+            self.lbl_info.setText(self.T["aucune_image_strip"])
             return
 
         self.lbl_info.setText(f"{nb} image{'s' if nb > 1 else ''} — {os.path.basename(dossier)}")
@@ -591,32 +836,51 @@ class MainWindow(QMainWindow):
         self.lbl_image_num.setStyleSheet("color: #888; font-size: 11px; min-width: 150px;")
 
         # Boutons d'action
-        self.btn_precedent = QPushButton("◀ Précédent")
+        self.btn_precedent = QPushButton(self.T["btn_precedent"])
         self.btn_precedent.setFixedSize(100, 32)
         self.btn_precedent.setStyleSheet(self._style_button())
         self.btn_precedent.clicked.connect(self._action_precedent)
 
-        self.btn_suivant = QPushButton("Suivant ▶")
+        self.btn_suivant = QPushButton(self.T["btn_suivant"])
         self.btn_suivant.setFixedSize(100, 32)
         self.btn_suivant.setStyleSheet(self._style_button())
         self.btn_suivant.clicked.connect(self._action_suivant)
 
-        self.btn_exporter = QPushButton("💾 Sauvegarder")
+        self.btn_exporter = QPushButton(self.T["btn_sauvegarder"])
         self.btn_exporter.setFixedSize(100, 32)
         self.btn_exporter.setStyleSheet(self._style_button())
         self.btn_exporter.clicked.connect(self._save_image_courante)
         
-        self.btn_exporter_tous = QPushButton("💾 Sauvegarder toutes les images")
+        self.btn_exporter_tous = QPushButton(self.T["btn_sauvegarder_tout"])
         self.btn_exporter_tous.setFixedSize(200, 32)
         self.btn_exporter_tous.setStyleSheet(self._style_button())
         self.btn_exporter_tous.clicked.connect(self._save_toutes_images)
+
+        # Bouton pour activer/désactiver le mode sélection
+        self.btn_mode_selection = QPushButton("Sélection")
+        self.btn_mode_selection.setFixedSize(100, 32)
+        self.btn_mode_selection.setCheckable(True)
+        self.btn_mode_selection.setStyleSheet(self._style_button())
+        self.btn_mode_selection.clicked.connect(self._toggle_mode_selection)
+        self.btn_mode_selection.setToolTip("Activez pour cocher/décocher des images à exporter.")
+
+        # Bouton de sauvegarde de la sélection (visible uniquement en mode sélection)
+        self.btn_exporter_selection = QPushButton("Sauvegarder (0)")
+        self.btn_exporter_selection.setFixedSize(160, 32)
+        self.btn_exporter_selection.setStyleSheet(self._style_button())
+        self.btn_exporter_selection.clicked.connect(self._save_images_selectionnees)
+        self.btn_exporter_selection.setEnabled(False)
+        self.btn_exporter_selection.setVisible(False)
 
         layout.addWidget(self.lbl_image_num)
         layout.addStretch()
         layout.addWidget(self.btn_precedent)
         layout.addWidget(self.btn_suivant)
+        layout.addWidget(self.btn_mode_selection)
+        layout.addWidget(self.btn_exporter_selection)
         layout.addWidget(self.btn_exporter)
         layout.addWidget(self.btn_exporter_tous)
+     
 
         return actionbar
 
@@ -646,14 +910,14 @@ class MainWindow(QMainWindow):
         """Action pour exporter l'image."""
         if self.chemin_courant:
             fichier, _ = QFileDialog.getSaveFileName(
-                self, "Exporter l'image", "", "Images JPG (*.jpg)"
+                self, self.T["btn_sauvegarder"], "", "Images JPG (*.jpg)"
             )
             if fichier:
                 if not fichier.lower().endswith(".jpg"):
                     fichier += ".jpg"
                 pixmap = QPixmap(self.chemin_courant)
                 pixmap.save(fichier, "JPEG", 95)
-                self.lbl_info.setText(f"Image exportée : {os.path.basename(fichier)}")
+                self.lbl_info.setText( self.T["btn_sauvegarder"] + os.path.basename(fichier))
 
     def _charger_image(self, chemin):
         """Affiche l'image sélectionnée avec ses 3 masques colorisés (pipeline main2.py)."""
@@ -674,8 +938,8 @@ class MainWindow(QMainWindow):
         if not config:
             nom_sans_ext = os.path.splitext(os.path.basename(chemin))[0]
             dossier      = os.path.dirname(chemin)
-            # Cherche nomimage_config.json ou config_segmentation.json (fallback)
             for candidat in [
+                os.path.join(dossier, f"{nom_sans_ext}_seg_config.json"),  # ← nouveau
                 os.path.join(dossier, f"{nom_sans_ext}_config.json"),
                 os.path.join(dossier, "config_segmentation.json"),
             ]:
@@ -692,11 +956,11 @@ class MainWindow(QMainWindow):
                     except Exception as e:
                         print(f"[WARN] Impossible de lire {candidat} : {e}")
                     break
+            
 
         if config:
             self.couleurs = config["couleurs"]
         else:
-            import copy
             config = copy.deepcopy(self.config_defaut)
             self.couleurs = dict(self.couleurs_defaut)
 
@@ -750,11 +1014,28 @@ class MainWindow(QMainWindow):
         if config and self.segmentation_window:
             self.segmentation_window.restaurer_config(config)
 
-        # --- Restaurer les mesures dans la toolbox si elles existent pour cette image ---
-        mesures = self.mesures_par_image.get(chemin)
-        if mesures:
+        if self.chemin_dossier:
+            nom_base = os.path.splitext(os.path.basename(chemin))[0]
+            
+            if "_OVP" in nom_base:
+                nom_json = nom_base.split("_OVP")[0]
+            else:
+                nom_json = nom_base
+
+            json_provisoire     = os.path.join(self.chemin_dossier, "mesures_json", f"{nom_json}_data.json")
+            json_archive        = os.path.join(self.chemin_dossier, f"{nom_json}_OVP", "results", "mesures_json", f"{nom_json}_data.json")
+            pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom_json}_data.json")
+            resultats = glob.glob(pattern)
+            json_archive_global = resultats[0] if resultats else ""
             self._init_toolbox()
-            self.toolbox.afficher_donnees(mesures["data"])
+            if os.path.exists(json_archive):
+                self.toolbox.chemin_json_courant = json_archive
+            elif os.path.exists(json_archive_global):
+                self.toolbox.chemin_json_courant = json_archive_global
+            elif os.path.exists(json_provisoire):
+                self.toolbox.chemin_json_courant = json_provisoire
+            else:
+                self.toolbox.chemin_json_courant = None
 
     # ------------------------------------------------------------------
     # Chargement / affichage
@@ -775,6 +1056,26 @@ class MainWindow(QMainWindow):
         if self.segmentation_window:
             config.update(self.segmentation_window.recup_config())
         self.config_par_image[self.chemin_image] = config
+
+    def sauvegarder_config(self):
+        """Sauvegarde en mémoire la config courante (sliders, couleurs, visibilités)
+        pour l'image active. Appelé automatiquement au relâchement d'un slider."""
+        if not self.chemin_image or not self.segmentation_window:
+            return
+        config = {"couleurs": {k: tuple(v) for k, v in self.couleurs.items()}}
+        config.update(self.segmentation_window.recup_config())
+        self.config_par_image[self.chemin_image] = config
+
+        # ← Un fichier par image, pas par dossier
+        dossier      = os.path.dirname(self.chemin_image)
+        nom_sans_ext = os.path.splitext(os.path.basename(self.chemin_image))[0]
+        chemin_json  = os.path.join(dossier, f"{nom_sans_ext}_seg_config.json")
+        try:
+            with open(chemin_json, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, default=str)
+        except Exception as e:
+            print(f"[WARN] Impossible d'écrire {chemin_json} : {e}")
+
 
     def _recharger_masques(self):
         """Recharge les masques colorisés sans toucher au fundus ni à la scène entière."""
@@ -837,76 +1138,213 @@ class MainWindow(QMainWindow):
 
         # Sauvegarder les opacités pour cette image
         self._sauvegarder_config_courante()
+        
+    def creer_disque_optique(self, x_loc = 500, y_loc = 500):
+        DiscToAdd= Image.open(self.list_paths[3]).convert("RGB")
+        arr = np.array(DiscToAdd)
+
+        if np.all(arr == 0): 
+            draw = ImageDraw.Draw(DiscToAdd)
+                    
+            rayon = 76
+
+            draw.ellipse(
+                (
+                x_loc - rayon,
+                y_loc - rayon,
+                x_loc + rayon,
+                y_loc + rayon
+                ),
+                fill="white"
+                )
+
+        DiscToAdd.save(self.list_paths[3])
+        self._recharger_masques()
+
+
 
     def edit_disque_optique(self, state=None):
         if state is None:
             state = self.actEditerDisque.isChecked()
-
+ 
         self.actEditerDisque.setChecked(state)
-
+ 
         if self.segmentation_window:
             self.segmentation_window.btn_editer.setChecked(state)
 
+        if state is True:
+            StyledMessageBox.information(self, "Mode édition", "Vous pouvez déplacer le disque sur l'image.")
+ 
         if self.item_od:
             self.item_od.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, state)
-        print(f"Édition disque : {state}")
+            self.item_od.setCursor(
+                Qt.CursorShape.OpenHandCursor if state else Qt.CursorShape.ArrowCursor
+            )
+ 
+        # La boîte de sauvegarde s'ouvre seulement quand on DÉSACTIVE l'édition
+        # (l'utilisateur vient de finir de déplacer le disque)
+        if not state and self.item_od and self.list_paths:
+            disqueBox = StyledMessageBox(self)
+            disqueBox.setWindowTitle("Sauvegarde")
+            disqueBox.setText("Sauvegarder le nouveau disque.")
+            disqueBox.setInformativeText("Voulez-vous mettre à jour l'emplacement du disque optique ?")
+            oui_disque = disqueBox.addButton("Oui", QMessageBox.ActionRole)
+            non_disque = disqueBox.addButton("Non", QMessageBox.ActionRole)
+            disqueBox.exec()
+ 
+            if disqueBox.clickedButton() == oui_disque:
+                try:
+        
+                    chemin_od = self.list_paths[3]
 
-        if state:
-            self.item_od.setCursor(Qt.CursorShape.OpenHandCursor)
-        else:
-            self.item_od.setCursor(Qt.CursorShape.ArrowCursor)
+                    # Déplacement en coordonnées scène
+                    pos = self.item_od.scenePos()
+                    dx  = int(pos.x())
+                    dy  = int(pos.y())
+
+                    # Charger, translater et sauvegarder le masque
+                    masque = cv2.imread(chemin_od, cv2.IMREAD_GRAYSCALE)
+                    if masque is not None:
+                        h, w = masque.shape
+                        M    = np.float32([[1, 0, dx], [0, 1, dy]])
+                        masque_deplace = cv2.warpAffine(masque, M, (w, h))
+                        cv2.imwrite(chemin_od, masque_deplace)
+
+                        # Recharger le pixmap OD depuis le fichier mis à jour
+                        # On force Qt à ne pas utiliser de cache en passant par QImage
+                        od_image  = QImage(chemin_od)
+                        pixmap_od = QPixmap.fromImage(od_image)
+
+                        # Mettre à jour l'item en place sans bouger la scène
+                        self.item_od.setPixmap(pixmap_od)
+                        self.item_od.setPos(0, 0)
+
+                        # Coloriser avec les couleurs courantes
+                        self._recharger_masques()
+
+                        # Mettre à jour la miniature dans le strip fundus
+                        idx = self.image_strip.strip_fundus.index_courant
+                        if 0 <= idx < len(self.image_strip.strip_fundus.boutons):
+                            pixmap_mini = QPixmap(self.chemin_image).scaled(
+                                80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                            )
+                            pixmap_mini = self.image_strip.strip_fundus._superposer_masque(
+                                pixmap_mini, chemin_od
+                            )
+                            btn = self.image_strip.strip_fundus.boutons[idx]
+                            btn.setIcon(QIcon(pixmap_mini))
+                            btn.setIconSize(pixmap_mini.size())
+
+                        StyledMessageBox.information(self, "Succès", "Le disque optique a été mis à jour.")
+                    else:
+                        StyledMessageBox.warning(self, "Erreur", "Impossible de charger le masque du disque optique.")
+
+                except Exception as e:
+                    StyledMessageBox.critical(self, "Erreur", f"Erreur lors de la sauvegarde : {e}")
+
+            if disqueBox.clickedButton() == non_disque:
+                StyledMessageBox.information(self, "Annulé", "Le déplacement du disque optique a été annulé.")
+                self.item_od.setPos(0, 0)
+
+ #=================Lancer mesure=======================
+
+        def trouver_json_mesures(self, nom_json):
+         """Cherche le JSON de mesures dans tous les emplacements possibles."""
+        if not self.chemin_dossier:
+            return None
+
+        # 1. Provisoire (calcul non sauvegardé)
+        json_provisoire = os.path.join(self.chemin_dossier, "mesures_json", f"{nom_json}_data.json")
+        if os.path.exists(json_provisoire):
+            return json_provisoire
+
+        # 2. Archive individuelle (save image par image)
+        json_archive = os.path.join(self.chemin_dossier, f"{nom_json}_OVP", "results", "mesures_json", f"{nom_json}_data.json")
+        if os.path.exists(json_archive):
+            return json_archive
+
+        # 3. Archive globale — nom du dossier inconnu, on parcourt tous les sous-dossiers
+        try:
+            for nom_sous_dossier in os.listdir(self.chemin_dossier):
+                candidat = os.path.join(
+                    self.chemin_dossier, nom_sous_dossier,
+                    "results", "mesures_json", f"{nom_json}_data.json"
+                )
+                if os.path.exists(candidat):
+                    return candidat
+        except OSError:
+            pass
+
+        return None
+    
 
     def mesure(self):
-        self._init_toolbox()
 
-        if not self.chemin_image:
-            print("Erreur : Aucune image chargée.")
+        if self.chemin_dossier is None:
+            StyledMessageBox.information(self, "Aucun dossier sélectionné", self.T["dlg_save_aucun_dossier"])
+            return
+        
+        StyledMessageBox.information(self, "Mesures lancées avec succès", "Les mesures ont été lancées.")
+
+        
+        self._init_toolbox()
+        nom_image = os.path.basename(self.chemin_image)
+        nom_base  = os.path.splitext(nom_image)[0]
+        nom_ovp   = f"{nom_base}_OVP"
+
+        if "_OVP" in nom_base:
+            nom_json = nom_base.split("_OVP")[0]
+        else:
+            nom_json = nom_base
+
+        # Chemin provisoire (à la racine)
+
+        output_csv_root = os.path.join(self.chemin_dossier, "mesures.csv")
+        json_provisoire = os.path.join(self.chemin_dossier, "mesures_json", f"{nom_json}_data.json")
+        json_archive    = os.path.join(self.chemin_dossier, f"{nom_json}_OVP", "results", "mesures_json", f"{nom_json}_data.json")
+        pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom_json}_data.json")
+        resultats = glob.glob(pattern)
+        json_archive_global = resultats[0] if resultats else ""
+
+        # --- TESTS D'EXISTENCE ---
+
+        if os.path.exists(json_archive):
+            self.toolbox.chemin_json_courant = json_archive
+            self.statusBar().showMessage(self.T["status_mesures_chargees"])
             return
 
-        nom_image  = os.path.basename(self.chemin_image)
-        nom_base   = os.path.splitext(nom_image)[0]
-        nom_masque = nom_base + ".png"
+        if os.path.exists(json_archive_global):
+            self.toolbox.chemin_json_courant = json_archive_global
+            self.statusBar().showMessage(self.T["status_mesures_chargees_global"])
+            return
 
-        # CSV nommé par image pour éviter les écrasements
-        output_csv = f"{nom_base}_mesures.csv"
-        output_json = f"{nom_base}_data.json"
-
-        self.statusBar().showMessage("Veuillez patienter...")
+        if os.path.exists(output_csv_root):
+            if rc.image_est_dans_csv(output_csv_root, nom_image):
+                self.statusBar().showMessage(self.T["status_chargement_mesures"])
+                rc.csv_to_jsons(output_csv_root, self.chemin_dossier)
+                self.toolbox.chemin_json_courant = json_provisoire
+                return
+            
+        # ---  SI RIEN N'EXISTE : LANCEMENT DU CALCUL ---
+        self.statusBar().showMessage(self.T["status_calcul"])
 
         vein_dir = self.chemin_abs("veins")
         art_dir  = self.chemin_abs("arteries")
         od_dir   = self.chemin_abs("od")
 
-        args = ["measurements2.py", art_dir, vein_dir, od_dir, output_csv, nom_masque]
+        args = ["measurements.py", art_dir, vein_dir, od_dir, output_csv_root]
 
         try:
             m_script.main(args)
-
-            row_brute = rc.read_first_row(output_csv)
-            if row_brute:
-                data_complete = rc.classer_donnees(row_brute)
-                rc.write_json(data_complete, output_json)
-
-                # Stocker les résultats associés à cette image
-                self.mesures_par_image[self.chemin_image] = {
-                    "csv":   output_csv,
-                    "json":  output_json,
-                    "data":  data_complete,
-                    "image": self.chemin_image,  # référence explicite à l'image
-                }
-                self.data_complete = data_complete
-
-                # Envoyer les données à la toolbox de mesures
-                self._init_toolbox()
-                self.toolbox.afficher_donnees(data_complete)
-
-                self.statusBar().showMessage(f"Mesures terminées pour {nom_image}.")
-            else:
-                self.statusBar().showMessage("Erreur : Le script n'a généré aucune ligne de données.")
+            rc.csv_to_jsons(output_csv_root, self.chemin_dossier)
+            
+            self.toolbox.chemin_json_courant = json_provisoire
+            self.statusBar().showMessage(self.T["status_mesures_terminees"].format(nom=nom_image))
 
         except Exception as e:
             print(f"Erreur lors de l'exécution : {e}")
-
+            self.statusBar().showMessage("Une erreur est survenue lors du calcul.")
+            
     def chemin_abs(self, type_seg):
         abs_chemin = self.chemin_image
 
@@ -917,16 +1355,16 @@ class MainWindow(QMainWindow):
         abs_chemin = os.path.dirname(abs_chemin)
         return abs_chemin
 
-    # -----------------ACTION 7: OUVRIR MESURES----------------
-    # CORRECTION : méthode dupliquée supprimée (deux définitions identiques existaient)
+
+    #-----------------ACTION 7: OUVRIR MESURES----------------
     def _init_toolbox(self):
-        """Crée le dock de mesures une seule fois, puis le rend visible."""
         if self.toolbox is None:
             self.toolbox = mb.MesuresToolbox(self)
             self.addDockWidget(Qt.RightDockWidgetArea, self.toolbox)
             self.actAfficherToolbox.triggered.connect(self.toolbox.setVisible)
             self.toolbox.visibilityChanged.connect(self.actAfficherToolbox.setChecked)
         self.toolbox.show()
+
 
     def generer_rendu_fusionne(self):
         """Crée une image fusionnant le fond d'œil et les calques de segmentation."""
@@ -1045,7 +1483,7 @@ class MainWindow(QMainWindow):
  
             # Masques binarisés (veins, arteries, od)
             try:
-                import cv2
+                
                 paths  = images_paths(self.path_image_courante)
                 calques = [
                     (paths[1], "veins"),
@@ -1089,23 +1527,28 @@ class MainWindow(QMainWindow):
                     json.dump(data_seg, f, indent=4)
  
             # Fichiers de mesures (CSV / JSON) s'ils existent
-            for src, dest_name in [
-                ("test_mesures.csv", f"{nom_ovp}_mesures.csv"),
-                ("data.json",        f"{nom_ovp}_data.json"),
-            ]:
-                if os.path.exists(src):
-                    shutil.copy(src, os.path.join(dossier_results, dest_name))
- 
+            csv_source = os.path.join(self.chemin_dossier, "mesures.csv")
+            if os.path.exists(csv_source):
+                csv_dest = os.path.join(dossier_results, f"{nom_ovp}_mesures.csv")
+                shutil.move(csv_source, csv_dest)
+
+            # 2. Déplacement du dossier JSON
+            json_dir_source = os.path.join(self.chemin_dossier, "mesures_json")
+            if os.path.exists(json_dir_source):
+                json_dir_dest = os.path.join(dossier_results, "mesures_json")
+                if os.path.exists(json_dir_dest):
+                    shutil.rmtree(json_dir_dest)
+                shutil.move(json_dir_source, json_dir_dest)
+    
             self.statusBar().showMessage(f"Projet « {nom_ovp} » enregistré.")
             StyledMessageBox.information(self, "Succès", f"Projet créé :\n{dossier_projet}")
- 
+    
         except Exception as e:
             StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
             
             
     def _save_une_image(self, chemin_image, dossier_dest):
         """Sauvegarde une image et ses masques dans dossier_dest."""
-        import cv2
         nom_base      = os.path.splitext(os.path.basename(chemin_image))[0]
         nom_ovp       = f"{nom_base}_OVP"
         extension_src = os.path.splitext(chemin_image)[1]
@@ -1160,6 +1603,171 @@ class MainWindow(QMainWindow):
 
         return dossier_projet
 
+    def _toggle_mode_selection(self, actif: bool):
+        """Active/désactive le mode sélection sur les miniatures."""
+        strip = self.image_strip.strip_fundus
+        strip.activer_mode_selection(actif)
+
+        if actif:
+            self.btn_mode_selection.setStyleSheet("""
+                QPushButton {
+                    background: #1a4a2a;
+                    color: #00ee66;
+                    border: 1px solid #00cc55;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+                QPushButton:hover { background: #205a32; }
+                QPushButton:checked { background: #1a4a2a; }
+            """)
+            self.btn_mode_selection.setText("Quitter")
+            self.btn_exporter_selection.setVisible(True)
+            # Désactiver les boutons qui ne doivent pas interférer
+            self.btn_precedent.setEnabled(False)
+            self.btn_suivant.setEnabled(False)
+        else:
+            self.btn_mode_selection.setStyleSheet(self._style_button())
+            self.btn_mode_selection.setText("Sélection")
+            self.btn_exporter_selection.setVisible(False)
+            self.btn_exporter_selection.setEnabled(False)
+            self.btn_precedent.setEnabled(True)
+            self.btn_suivant.setEnabled(True)
+
+    def _on_selection_changed(self, chemins):
+        """Met à jour le bouton de sauvegarde de sélection."""
+        n = len(chemins)
+        self.btn_exporter_selection.setText(f"Sauvegarder ({n})")
+        self.btn_exporter_selection.setEnabled(n > 0)
+
+    def _save_images_selectionnees(self):
+        """Sauvegarde les images cochées, avec le même flux que _save_toutes_images."""
+        chemins = self.image_strip.strip_fundus.chemins_selectionnes()
+        if not chemins:
+            StyledMessageBox.information(self, "Sélection vide",
+                "Aucune image sélectionnée.\nCliquez sur des miniatures pour en cocher.")
+            return
+
+        if self.chemin_dossier is None:
+            StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
+            return
+
+        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du nouveau projet :')
+        if not ok or not sauv_fichier.strip():
+            return
+
+        messageBox = StyledMessageBox(self)
+        messageBox.setWindowTitle("Sauvegarde des images")
+        messageBox.setText("Voulez-vous un dossier par image (1) ou un dossier pour toutes les images (2) ?")
+        btn_QAS = messageBox.addButton("1", QMessageBox.ActionRole)
+        btn_QSS = messageBox.addButton("2", QMessageBox.ActionRole)
+        messageBox.addButton(QMessageBox.Cancel)
+        messageBox.exec()
+
+        if messageBox.clickedButton() not in (btn_QAS, btn_QSS):
+            return
+
+        dossier_dest = self.chemin_dossier
+        nb      = len(chemins)
+        erreurs = []
+
+        if messageBox.clickedButton() == btn_QAS:
+            # --- Un dossier nomimage_OVP/ par image ---
+            for i, chemin in enumerate(chemins):
+                self.statusBar().showMessage(f"Sauvegarde {i + 1}/{nb} — {os.path.basename(chemin)}…")
+                QApplication.processEvents()
+                try:
+                    self._save_une_image(chemin, dossier_dest)
+                except Exception as e:
+                    erreurs.append(f"{os.path.basename(chemin)} : {e}")
+
+        else:
+            # --- Sous-question : tous les rendus ou seulement les modifiés ? ---
+            msgRendu = StyledMessageBox(self)
+            msgRendu.setWindowTitle("Rendus finaux")
+            msgRendu.setText("Voulez-vous exporter tous les rendus (tous) ou seulement les images modifiées (modifiées)?")
+            btn_tous_rendus  = msgRendu.addButton("Tous", QMessageBox.ActionRole)
+            btn_modif_rendus = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
+            msgRendu.addButton(QMessageBox.Cancel)
+            msgRendu.exec()
+
+            if msgRendu.clickedButton() not in (btn_tous_rendus, btn_modif_rendus):
+                return
+
+            exporter_tous_rendus = msgRendu.clickedButton() == btn_tous_rendus
+
+            dossier_base       = os.path.join(dossier_dest, f"{sauv_fichier}_fundus_images_code_OVP")
+            dossier_fundus     = os.path.join(dossier_base, "fundus_images")
+            dossier_fundus_seg = os.path.join(dossier_base, "fundus_rendu_images_finales")
+            dossier_result     = os.path.join(dossier_base, "results")
+
+            os.makedirs(dossier_fundus,     exist_ok=True)
+            os.makedirs(dossier_fundus_seg, exist_ok=True)
+            os.makedirs(dossier_result,     exist_ok=True)
+
+            for i, chemin in enumerate(chemins):
+                self.statusBar().showMessage(f"Sauvegarde {i + 1}/{nb} — {os.path.basename(chemin)}…")
+                QApplication.processEvents()
+                try:
+                    nom_base  = os.path.splitext(os.path.basename(chemin))[0]
+                    nom_ovp   = f"{nom_base}_OVP"
+                    extension = os.path.splitext(chemin)[1]
+
+                    # Image originale
+                    shutil.copy(chemin, os.path.join(dossier_fundus, f"{nom_ovp}{extension}"))
+
+                    # Rendu fusionné selon le choix
+                    a_ete_modifie = chemin in self.config_par_image
+                    if exporter_tous_rendus or a_ete_modifie:
+                        image_fusionnee = self._generer_rendu_pour(chemin)
+                        if image_fusionnee:
+                            image_fusionnee.save(os.path.join(dossier_fundus_seg, f"{nom_ovp}_rendu.png"))
+
+                    # Config JSON de la segmentation
+                    config_image = self.config_par_image.get(chemin)
+                    if config_image:
+                        with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
+                            json.dump(config_image, f, indent=4, default=str)
+                    elif chemin == self.chemin_image and self.segmentation_window:
+                        data_seg = self.segmentation_window.recup_image()
+                        with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
+                            json.dump(data_seg, f, indent=4)
+
+                    # Masques binarisés
+                    paths = images_paths(chemin)
+                    for chemin_mask, nom_calque in [(paths[1], "veins"), (paths[2], "arteries"), (paths[3], "od")]:
+                        if os.path.exists(chemin_mask):
+                            mask_brut = cv2.imread(chemin_mask, cv2.IMREAD_GRAYSCALE)
+                            if mask_brut is not None:
+                                _, mask_bin = cv2.threshold(mask_brut, 1, 255, cv2.THRESH_BINARY)
+                                sous_dossier = os.path.join(dossier_base, "segmentation_masks", nom_calque)
+                                os.makedirs(sous_dossier, exist_ok=True)
+                                cv2.imwrite(os.path.join(sous_dossier, f"{nom_ovp}.png"), mask_bin)
+
+                except Exception as e:
+                    erreurs.append(f"{os.path.basename(chemin)} : {e}")
+
+            csv_source = os.path.join(self.chemin_dossier, "mesures.csv")
+            json_dir_source = os.path.join(self.chemin_dossier, "mesures_json")
+
+            if os.path.exists(csv_source):
+                shutil.move(csv_source, os.path.join(dossier_result, "mesures_globales.csv"))
+
+            if os.path.exists(json_dir_source):
+                json_dir_dest = os.path.join(dossier_result, "mesures_json")
+                if os.path.exists(json_dir_dest):
+                    shutil.rmtree(json_dir_dest)
+                shutil.move(json_dir_source, json_dir_dest)
+
+            dossier_dest = dossier_base
+
+        if erreurs:
+            StyledMessageBox.warning(self, "Sauvegarde partielle",
+                f"{nb - len(erreurs)}/{nb} images sauvegardées.\n\nErreurs :\n" + "\n".join(erreurs))
+        else:
+            self.statusBar().showMessage(f"{nb} images sauvegardées.")
+            StyledMessageBox.information(self, "Succès", f"{nb} images sauvegardées dans :\n{dossier_dest}")
+
     def _save_image_courante(self):
         """Sauvegarde uniquement l'image actuellement affichée."""
         dossier_actuel_fundus  = os.path.dirname(self.path_image_courante)
@@ -1207,6 +1815,10 @@ class MainWindow(QMainWindow):
             StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
             return
 
+        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du nouveau projet :')
+        if not ok or not sauv_fichier.strip(): 
+            return
+
         messageBox = StyledMessageBox(self)
         messageBox.setWindowTitle("Sauvegarde des images")
         messageBox.setText("Voulez-vous un dossier par image (1) ou un dossier pour toutes les images (2) ?")
@@ -1248,8 +1860,7 @@ class MainWindow(QMainWindow):
             exporter_tous_rendus = msgRendu.clickedButton() == btn_tous_rendus
 
             # --- Tout dans un seul dossier plat ---
-            import cv2
-            dossier_base       = os.path.join(dossier_dest, "fundus_images_code_OVP")
+            dossier_base       = os.path.join(dossier_dest, f"{sauv_fichier}_fundus_images_code_OVP")
             dossier_fundus     = os.path.join(dossier_base, "fundus_images")
             dossier_fundus_seg = os.path.join(dossier_base, "fundus_rendu_images_finales")
             dossier_result     = os.path.join(dossier_base, "results")
@@ -1298,16 +1909,24 @@ class MainWindow(QMainWindow):
                                 cv2.imwrite(os.path.join(sous_dossier, f"{nom_ovp}.png"), mask_bin)
 
                     # Mesures spécifiques à cette image
-                    mesures = self.mesures_par_image.get(chemin)
-                    if mesures:
-                        if os.path.exists(mesures["csv"]):
-                            shutil.copy(mesures["csv"], os.path.join(dossier_result, f"{nom_ovp}_mesures.csv"))
-                        if os.path.exists(mesures["json"]):
-                            shutil.copy(mesures["json"], os.path.join(dossier_result, f"{nom_ovp}_data.json"))
+ 
 
                 except Exception as e:
                     erreurs.append(f"{os.path.basename(chemin)} : {e}")
+            csv_source = os.path.join(self.chemin_dossier, "mesures.csv")
+            json_dir_source = os.path.join(self.chemin_dossier, "mesures_json")
 
+            if os.path.exists(csv_source):
+                # Utilise shutil.move pour "nettoyer" la racine
+                shutil.move(csv_source, os.path.join(dossier_result, "mesures_globales.csv"))
+                print("CSV global archivé.")
+
+            if os.path.exists(json_dir_source):
+                json_dir_dest = os.path.join(dossier_result, "mesures_json")
+                if os.path.exists(json_dir_dest): 
+                    shutil.rmtree(json_dir_dest)
+                shutil.move(json_dir_source, json_dir_dest)
+                print("Dossier JSON archivé.")
             dossier_dest = dossier_base
 
         if erreurs:
@@ -1316,6 +1935,22 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(f"{nb} images sauvegardées.")
             StyledMessageBox.information(self, "Succès", f"{nb} images sauvegardées dans :\n{dossier_dest}")
+    
+    def closeEvent(self, event):
+        """Sauvegarde la config de toutes les images modifiées avant de quitter."""
+        for chemin, config in self.config_par_image.items():
+            dossier      = os.path.dirname(chemin)
+            nom_sans_ext = os.path.splitext(os.path.basename(chemin))[0]
+            chemin_json  = os.path.join(dossier, f"{nom_sans_ext}_seg_config.json")
+            try:
+                with open(chemin_json, "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2, default=str)
+            except Exception as e:
+                print(f"[WARN] Impossible d'écrire {chemin_json} : {e}")
+        
+        # Sauvegarder aussi l'image courante (au cas où elle n'est pas encore dans config_par_image)
+        self.sauvegarder_config()
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":

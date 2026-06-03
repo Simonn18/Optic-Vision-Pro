@@ -1,61 +1,28 @@
 import csv
-# import measurements2 as m_script
 import os 
 import json
-
-# def mesure(self):
-#     if not self.chemin_image:
-#         print("Erreur : Aucune image chargée.")
-#         return
-
-#     nom_image = os.path.basename(self.chemin_image)
-    
-#     nom_masque = nom_image.replace(".jpg", ".png")
-
-#     base_dir = "segmentation_masks"
-#     art_dir = os.path.join(base_dir, "arteries")
-#     vein_dir = os.path.join(base_dir, "veins")
-#     od_dir = os.path.join(base_dir, "od")
-#     output_csv = "mesures.csv"
-
-#     args = ["measurement.py", art_dir, vein_dir, od_dir, output_csv, nom_masque]
-    
-#     try:
-#         m_script.main(args)
-#         self.lbl_affiche_mesures.setText(f"Analyse de {nom_masque} terminée !")
-#     except Exception as e:
-#         self.lbl_affiche_mesures.setText(f"Erreur : {str(e)}")
-
-
-    
-
-
-def read_first_row(file):
-    with open(file, newline='', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)
-        
-        try:
-            first_row = next(reader)
-            
-            return first_row
-        except StopIteration:
-            return None 
-        
-
 
 
 def classer_donnees(row):
     """
     Organise la ligne CSV brute en un dictionnaire structuré :
-    Racine (Arteries/Veins/AV) -> Région (A/B/C/Out/All) -> Groupe -> Mesures
+    IMAGE_ID -> Racine (Arteries/Veins/AV) -> Région (A/B/C/Out/All) -> Bloc -> Mesures
     """
-    if not row: return {}
+    if not isinstance(row, dict):
+        print("Erreur : classer_donnees a reçu autre chose qu'un dictionnaire")
+        return {}
 
-    groupes = ["Secteurs", "Calibre", "Topologie", "Points_critiques", "Tortuosite"]
+    groupes = ["quality control", "vessel detection", "geometric metrics"]
     zones = ["A", "B", "C", "Out", "All"]
     organes = ["Arteries", "Veins", "AV"]
 
-    classement = {o: {z: {g: {} for g in groupes} for z in zones} for o in organes}
+    # Initialisation avec IMAGE_ID à la racine
+    classement = {
+        "IMAGE_ID": row.get("image"),
+        "Arteries": {z: {g: {} for g in groupes} for z in zones},
+        "Veins": {z: {g: {} for g in groupes} for z in zones},
+        "AV": {z: {g: {} for g in groupes} for z in zones}
+    }
 
     for key, value in row.items():
         if key == "image": continue
@@ -72,7 +39,7 @@ def classer_donnees(row):
         elif "_AV" in key: racine = "AV"
         else: continue
 
-        #Region 
+        # Region 
         if "_A_" in key: region = "A"
         elif "_B_" in key: region = "B"
         elif "_C_" in key: region = "C"
@@ -80,40 +47,56 @@ def classer_donnees(row):
         elif "_All_" in key: region = "All"
         else: continue
 
-        # Secteurs
+        # --- CLASSEMENT DANS LES NOUVEAUX BLOCS ---
+
+        # 1. Quality Control (wpr et vzr)
         if key.startswith(("wpr", "vzr")):
-            famille, secteur = key[:3], key[3]
-            if famille not in classement[racine][region]["Secteurs"]:
-                classement[racine][region]["Secteurs"][famille] = {}
-            classement[racine][region]["Secteurs"][famille][secteur] = val_convertie
+            classement[racine][region]["quality control"][key] = val_convertie
 
-        #Calibre       
-        elif "Caliber" in key or "nbX" in key or "avr" in key:
-            classement[racine][region]["Calibre"][key] = val_convertie
+        # 2. Vessel Detection (nbX)
+        elif "nbX" in key:
+            classement[racine][region]["vessel detection"][key] = val_convertie
 
-        #Topologie
-        elif "fractal" in key or "nbCC" in key or "area" in key or "Depth" in key or "State" in key:
-            classement[racine][region]["Topologie"][key] = val_convertie
-
-        #Point
-        elif "EndP" in key or "CrossP" in key or "OverlapP" in key:
-            classement[racine][region]["Points_critiques"][key] = val_convertie
-
-        #Tortuosité 
-
-        elif "Tort" in key:
-            classement[racine][region]["Tortuosite"][key] = val_convertie
+        # 3. Geometric Metrics (Tout le reste : Caliber, fractal, Tort, area, etc.)
+        else:
+            # On met tout ce qui reste dans geometric metrics (calibres, points critiques, topologie, tortuosité)
+            classement[racine][region]["geometric metrics"][key] = val_convertie
 
     return classement
 
 
-def write_json(data, filename="data.json"):
+
+
+def csv_to_jsons(csv_file, base_dir):
     """
-    Sauvegarde le dictionnaire classé dans un fichier JSON.
+    Crée un sous-dossier 'mesures_json' dans base_dir et y enregistre
+    un JSON par image.
     """
-    with open(filename, "w", encoding="utf-8") as f:
-        # On utilise le module json pour écrire le dictionnaire
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    if not os.path.exists(csv_file):
+        print(f"Erreur : {csv_file} introuvable.")
+        return
+
+    output_dir = os.path.join(base_dir, "mesures_json")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    with open(csv_file, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            nom_image = row.get("image", "").strip()
+            if not nom_image:
+                continue
+
+            data_structuree = classer_donnees(row)
+
+            nom_base = os.path.splitext(nom_image)[0]
+            # On enregistre DANS le sous-dossier
+            chemin_json = os.path.join(output_dir, f"{nom_base}_data.json")
+
+            with open(chemin_json, "w", encoding="utf-8") as json_f:
+                json.dump(data_structuree, json_f, indent=4, ensure_ascii=False)
+            
+            print(f"JSON généré dans le sous-dossier : {chemin_json}")
 
 
 
@@ -130,11 +113,12 @@ def requete(data, organe=None, zone=None, groupe=None):
     """
     
     resultat = {}
+    if "IMAGE_ID" in data:
+        resultat["IMAGE_ID"] = data["IMAGE_ID"]
 
-    # On filtre d'abord les organes (Arteries, Veins, AV)
     for nom_organe, contenu_organe in data.items():
-        # Si on ne précise pas d'organe, on les garde tous
-        # Si on précise, on ne garde que ceux qui correspondent
+        if nom_organe == "IMAGE_ID": continue
+
         if organe is None or nom_organe in organe:
             
             # On crée un dictionnaire pour cet organe dans notre résultat
@@ -157,39 +141,61 @@ def requete(data, organe=None, zone=None, groupe=None):
     return resultat
 
 
+
+
+def image_est_dans_csv(csv_file, nom_image):
+    """Vérifie si une image est déjà dans le CSV."""
+    if not os.path.exists(csv_file):
+        return False
+    with open(csv_file, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("image", "").strip() == nom_image:
+                return True
+    return False
+
+
 def export_txt(data, filename="rapport_mesures.txt"):
-        
-        """Génère un rapport lisible à partir du dictionnaire de résultats."""
+    """Génère le rapport .txt avec une vérification de type."""
+    if not isinstance(data, dict):
+        print(f"Erreur export_txt : 'data' est de type {type(data)} au lieu de dict.")
+        return
 
-        with open(filename, "w", encoding="utf-8") as f:
+    with open(filename, "w", encoding="utf-8") as f:
+        # Écriture de l'ID de l'image
+        nom_image = data.get("IMAGE_ID", "Inconnu")
+        f.write(f"IMAGE ANALYSÉE : {nom_image}\n")
+        f.write("="*60 + "\n\n")
 
-            if not data:
-                f.write("Aucune donnée sélectionnée.\n")
-                return
-
-            for organe, zones in data.items():
-                f.write(f"- ORGANE : {organe.upper()}\n")
-                f.write("-" * 30 + "\n")
-                
-                for zone, groupes in zones.items():
-                    f.write(f"   - Zone {zone}\n")
-                    
-                    for groupe, mesures in groupes.items():
-                        f.write(f"     - {groupe}:\n")
-                        
-                        # On regarde chaque mesure dans le groupe
-                        for nom_mesure, valeur in mesures.items():
-                            
-                            if type(valeur) is dict:
-                                f.write(f"      - {nom_mesure} :\n")
-                                for sous_nom, sous_valeur in valeur.items():
-                                    f.write(f"          {sous_nom} : {sous_valeur}\n")
-                                    
-                            else:
-                                f.write(f"      - {nom_mesure} : {valeur}\n")
-                f.write("\n")
+        for organe, zones in data.items():
+            if organe == "IMAGE_ID": 
+                continue 
             
-            f.write("="*60 + "\n")
+            # Autre sécurité : vérifier que 'zones' est bien un dictionnaire avant d'itérer
+            if not isinstance(zones, dict):
+                continue
+
+            f.write(f"- ORGANE : {organe.upper()}\n")
+            f.write("-" * 30 + "\n")
+            
+            for zone, groupes in zones.items():
+                if not isinstance(groupes, dict): continue
+                
+                f.write(f"   - Zone {zone}\n")
+                for groupe, mesures in groupes.items():
+                    if not isinstance(mesures, dict): continue
+                    
+                    f.write(f"     - {groupe}:\n")
+                    for nom_mesure, valeur in mesures.items():
+                        if isinstance(valeur, dict):
+                            f.write(f"      - {nom_mesure} :\n")
+                            for sous_nom, sous_valeur in valeur.items():
+                                f.write(f"          {sous_nom} : {sous_valeur}\n")
+                        else:
+                            f.write(f"      - {nom_mesure} : {valeur}\n")
+            f.write("\n")
+        f.write("="*60 + "\n")
+
 
 
 if __name__ == "__main__":
@@ -198,4 +204,3 @@ if __name__ == "__main__":
         with open('data.json', 'r') as f:
             data_test = json.load(f)
             print("Test local réussi")
-
