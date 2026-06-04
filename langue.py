@@ -187,12 +187,12 @@ TEXTES = {
         "en": "Do you want one folder per image (1) or one folder for all images (2)?",
     },
     "dlg_save_all_btn1": {
-        "fr": "1 — Un dossier par image",
-        "en": "1 — One folder per image",
+        "fr": "1 ",
+        "en": "1 ",
     },
     "dlg_save_all_btn2": {
-        "fr": "2 — Tout dans un dossier",
-        "en": "2 — All in one folder",
+        "fr": "2 ",
+        "en": "2",
     },
     "dlg_rendus_titre": {
         "fr": "Rendus finaux",
@@ -258,6 +258,187 @@ TEXTES = {
         "fr": "Lancer les mesures",
         "en": "Run measurements",
     },
+    "btn_maj_rendu": {
+        "fr": "Sauvegarder les rendus",
+        "en": "Save renderings",
+    },
+    "btn_selection_activer": {
+        "fr": "Sélection",
+        "en": "Selection",
+    },
+    "btn_selection_quitter": {
+        "fr": "Quitter sélection",
+        "en": "Exit selection",
+    },
+    "btn_sauvegarder_n": {
+        "fr": "Sauvegarder ({n})",
+        "en": "Save ({n})",
+    },
+
+    # ──────────────────────────────────────────────
+    # Dialogues — sauvegarder_rendus
+    # ──────────────────────────────────────────────
+    "dlg_rendus_maj_titre": {
+        "fr": "Rendus finaux",
+        "en": "Final renderings",
+    },
+    "dlg_rendus_maj_texte": {
+        "fr": "Voulez-vous mettre à jour le dossier de rendus ?",
+        "en": "Do you want to update the renderings folder?",
+    },
+    "dlg_rendus_choix_texte": {
+        "fr": "Voulez-vous enregistrer tous les rendus du dossier ou seulement les retravaillés ?",
+        "en": "Do you want to save all renderings or only the reworked ones?",
+    },
+    "dlg_rendus_btn_tous": {
+        "fr": "Tous",
+        "en": "All",
+    },
+    "dlg_rendus_btn_retravailles": {
+        "fr": "Retravaillés",
+        "en": "Reworked",
+    },
+    "dlg_rendus_btn_oui": {
+        "fr": "Oui",
+        "en": "Yes",
+    },
+    "dlg_rendus_btn_non": {
+        "fr": "Non",
+        "en": "No",
+    },
+    "dlg_rendus_succes_retrav": {
+        "fr": "Les rendus retravaillés ont été mis à jour.",
+        "en": "Reworked renderings have been updated.",
+    },
+    "dlg_rendus_succes_tous": {
+        "fr": "{n} rendus ont été mis à jour.",
+        "en": "{n} renderings have been updated.",
+    },
+    "dlg_rendus_partiel": {
+        "fr": "{ok}/{total} rendus sauvegardés.\n\nErreurs :\n{erreurs}",
+        "en": "{ok}/{total} renderings saved.\n\nErrors:\n{erreurs}",
+    },
+    "status_rendu_progress": {
+        "fr": "Rendu {i}/{n} — {nom}…",
+        "en": "Rendering {i}/{n} — {nom}…",
+    },
+
+    # ──────────────────────────────────────────────
+    # Dialogues — disque optique
+    # ──────────────────────────────────────────────
+    "dlg_disque_titre": {
+        "fr": "Sauvegarde",
+        "en": "Save",
+    },
+    "dlg_disque_texte": {
+        "fr": "Sauvegarder le nouveau disque.",
+        "en": "Save the new disc.",
+    },
+    "dlg_disque_info": {
+        "fr": "Voulez-vous mettre à jour l'emplacement du disque optique ?",
+        "en": "Do you want to update the optic disc position?",
+    },
+    "dlg_disque_btn_oui": {
+        "fr": "Oui",
+        "en": "Yes",
+    },
+    "dlg_disque_btn_non": {
+        "fr": "Non",
+        "en": "No",
+    },
+
+    # ──────────────────────────────────────────────
+    # Dialogues — _check_config_existante
+    # ──────────────────────────────────────────────
+    "dlg_config_existe_info": {
+        "fr": "Voulez-vous mettre à jour les réglages ou créer un nouveau projet ?",
+        "en": "Do you want to update the settings or create a new project?",
+    },
+
+    # ──────────────────────────────────────────────
+    # Dialogues — _save_groupe / QInputDialog
+    # ──────────────────────────────────────────────
+    "dlg_save_groupe_titre": {
+        "fr": "Sauvegarde",
+        "en": "Save",
+    },
+    "dlg_save_groupe_nom": {
+        "fr": "Nom du nouveau projet :",
+        "en": "New project name:",
+    },
+    "dlg_save_groupe_texte": {
+        "fr": "Un dossier par image (1) ou un dossier pour toutes les images (2) ?",
+        "en": "One folder per image (1) or one folder for all images (2)?",
+    },
+    "dlg_save_groupe_btn1": {
+        "fr": "1",
+        "en": "1",
+    },
+    "dlg_save_groupe_btn2": {
+        "fr": "2",
+        "en": "2",
+    },
+
+    # ──────────────────────────────────────────────
+    # Boutons mode sélection
+    # ──────────────────────────────────────────────
+    "btn_selection_quitter": {
+        "fr": "Quitter",
+        "en": "Exit",
+    },
+    "btn_selection_activer": {
+        "fr": "Sélection",
+        "en": "Select",
+    },
+    "btn_sauvegarder_n": {
+        "fr": "Sauvegarder ({n})",
+        "en": "Save ({n})",
+    },
+
+    # ──────────────────────────────────────────────
+    # Messages de statut supplémentaires
+    # ──────────────────────────────────────────────
+    "status_aucune_image_a_enregistrer": {
+        "fr": "Aucune image à enregistrer.",
+        "en": "No image to save.",
+    },
+    "status_aucune_image_chargee": {
+        "fr": "Aucune image chargée.",
+        "en": "No image loaded.",
+    },
+    "status_sauvegarde_progress": {
+        "fr": "Sauvegarde {i}/{n} — {nom}…",
+        "en": "Saving {i}/{n} — {nom}…",
+    },
+    "status_projet_enregistre": {
+        "fr": "Projet « {nom} » enregistré.",
+        "en": "Project « {nom} » saved.",
+    },
+    "status_erreur_calcul": {
+        "fr": "Une erreur est survenue lors du calcul.",
+        "en": "An error occurred during calculation.",
+    },
+    "dlg_save_projet_succes": {
+        "fr": "Projet créé :\n{chemin}",
+        "en": "Project created:\n{chemin}",
+    },
+    "dlg_selection_vide_titre": {
+        "fr": "Sélection vide",
+        "en": "Empty selection",
+    },
+    "dlg_selection_vide_texte": {
+        "fr": "Aucune image sélectionnée.\nCliquez sur des miniatures pour en cocher.",
+        "en": "No image selected.\nClick on thumbnails to check them.",
+    },
+    "dlg_save_all_btn_par_image": {
+        "fr": "1 — Un dossier par image",
+        "en": "1 — One folder per image",
+    },
+    "dlg_save_all_btn_global": {
+        "fr": "2 — Tout dans un dossier",
+        "en": "2 — All in one folder",
+    },
+
     "seg_groupe_couleurs": {
         "fr": "Modifier les couleurs",
         "en": "Change colours",
@@ -289,6 +470,10 @@ TEXTES = {
     "seg_opacite_disque": {
         "fr": "Opacité disque",
         "en": "Disc opacity",
+    },
+    "seg_groupe_rendus": {
+        "fr": "Rendus du dossier d'images",
+        "en": "Image folder renderings",
     },
     "seg_dlg_valider_titre": {
         "fr": "Valider le disque optique",
@@ -349,6 +534,14 @@ TEXTES = {
     "mes_groupe_zones": {
         "fr": "Zones",
         "en": "Zones",
+    },
+    "mes_cb_zoneAll": {
+        "fr": "Tout",
+        "en": "All",
+    },
+    "mes_cb_zoneOut": {
+        "fr": "Rien",
+        "en": "None",
     },
     "mes_btn_tout": {
         "fr": "Tout",
@@ -433,6 +626,26 @@ TEXTES = {
     "mes_export_impossible_texte": {
         "fr": "Aucune donnée à exporter. Lancez d'abord une mesure.",
         "en": "No data to export. Please run a measurement first.",
+    },
+    "mes_dlg_export_titre": {
+        "fr": "Export des mesures",
+        "en": "Measurements export",
+    },
+    "mes_dlg_export_texte": {
+        "fr": "Que voulez-vous exporter ?",
+        "en": "What do you want to export?",
+    },
+    "mes_dlg_export_btn_cette": {
+        "fr": "Cette image",
+        "en": "This image",
+    },
+    "mes_dlg_export_btn_toutes": {
+        "fr": "Toutes les images",
+        "en": "All images",
+    },
+    "mes_export_succes_toutes_texte": {
+        "fr": "Rapport de toutes les images enregistré :\n{chemin}",
+        "en": "Report for all images saved:\n{chemin}",
     },
 
     # ──────────────────────────────────────────────

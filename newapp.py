@@ -718,6 +718,16 @@ class MainWindow(QMainWindow):
         self.btn_suivant.setText(T["btn_suivant"])
         self.btn_exporter.setText(T["btn_sauvegarder"])
         self.btn_exporter_tous.setText(T["btn_sauvegarder_tout"])
+
+        # --- Bouton mode sélection ---
+        if hasattr(self, "btn_mode_selection"):
+            if self.image_strip.strip_fundus.mode_selection:
+                self.btn_mode_selection.setText(T["btn_selection_quitter"])
+            else:
+                self.btn_mode_selection.setText(T["btn_selection_activer"])
+        if hasattr(self, "btn_exporter_selection"):
+            n = len(self.image_strip.strip_fundus.indices_selectionnes)
+            self.btn_exporter_selection.setText(T["btn_sauvegarder_n"].format(n=n))
  
         # --- Placeholder ---
         self.lbl_placeholder.setText(T["placeholder"])
@@ -814,7 +824,8 @@ class MainWindow(QMainWindow):
             self.lbl_info.setText(self.T["aucune_image_strip"])
             return
 
-        self.lbl_info.setText(f"{nb} image{'s' if nb > 1 else ''} — {os.path.basename(dossier)}")
+        s = "s" if nb > 1 else ""
+        self.lbl_info.setText(self.T["img_n_sur_total"].format(n=nb, s=s, dossier=os.path.basename(dossier)))
         self.image_strip.show()
 
         # Charger automatiquement la première image
@@ -856,7 +867,7 @@ class MainWindow(QMainWindow):
         self.btn_exporter_tous.clicked.connect(self._save_toutes_images)
 
         # Bouton pour activer/désactiver le mode sélection
-        self.btn_mode_selection = QPushButton("Sélection")
+        self.btn_mode_selection = QPushButton(self.T["btn_selection_activer"])
         self.btn_mode_selection.setFixedSize(100, 32)
         self.btn_mode_selection.setCheckable(True)
         self.btn_mode_selection.setStyleSheet(self._style_button())
@@ -864,7 +875,7 @@ class MainWindow(QMainWindow):
         self.btn_mode_selection.setToolTip("Activez pour cocher/décocher des images à exporter.")
 
         # Bouton de sauvegarde de la sélection (visible uniquement en mode sélection)
-        self.btn_exporter_selection = QPushButton("Sauvegarder (0)")
+        self.btn_exporter_selection = QPushButton(self.T["btn_sauvegarder_n"].format(n=0))
         self.btn_exporter_selection.setFixedSize(160, 32)
         self.btn_exporter_selection.setStyleSheet(self._style_button())
         self.btn_exporter_selection.clicked.connect(self._save_images_selectionnees)
@@ -1084,6 +1095,7 @@ class MainWindow(QMainWindow):
             return
         config = {"couleurs": {k: tuple(v) for k, v in self.couleurs.items()}}
         config.update(self.segmentation_window.recup_config())
+        config["modifie"] = True
         self.config_par_image[self.chemin_image] = config
 
         # ← Un fichier par image, pas par dossier
@@ -1131,6 +1143,7 @@ class MainWindow(QMainWindow):
             self.addDockWidget(Qt.LeftDockWidgetArea, self.segmentation_window)
             self.actAfficherToolbox.triggered.connect(self.segmentation_window.setVisible)
             self.segmentation_window.visibilityChanged.connect(self.actAfficherToolbox.setChecked)
+            self.segmentation_window.appliquer_langue(self.T)
 
         self.segmentation_window.activate_all_segmentations()
         self.segmentation_window.show()
@@ -1205,11 +1218,11 @@ class MainWindow(QMainWindow):
         # (l'utilisateur vient de finir de déplacer le disque)
         if not state and self.item_od and self.list_paths:
             disqueBox = StyledMessageBox(self)
-            disqueBox.setWindowTitle("Sauvegarde")
-            disqueBox.setText("Sauvegarder le nouveau disque.")
-            disqueBox.setInformativeText("Voulez-vous mettre à jour l'emplacement du disque optique ?")
-            oui_disque = disqueBox.addButton("Oui", QMessageBox.ActionRole)
-            non_disque = disqueBox.addButton("Non", QMessageBox.ActionRole)
+            disqueBox.setWindowTitle(self.T["dlg_disque_titre"])
+            disqueBox.setText(self.T["dlg_disque_texte"])
+            disqueBox.setInformativeText(self.T["dlg_disque_info"])
+            oui_disque = disqueBox.addButton(self.T["dlg_disque_btn_oui"], QMessageBox.ActionRole)
+            non_disque = disqueBox.addButton(self.T["dlg_disque_btn_non"], QMessageBox.ActionRole)
             disqueBox.exec()
  
             if disqueBox.clickedButton() == oui_disque:
@@ -1406,7 +1419,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             print(f"Erreur lors de l'exécution : {e}")
-            self.statusBar().showMessage("Une erreur est survenue lors du calcul.")
+            self.statusBar().showMessage(self.T["status_erreur_calcul"])
             
     def chemin_abs(self, type_seg):
         abs_chemin = self.chemin_image
@@ -1418,6 +1431,77 @@ class MainWindow(QMainWindow):
         abs_chemin = os.path.dirname(abs_chemin)
         return abs_chemin
 
+    def _chemin_rendu_final(self, chemin_source: str) -> str:
+        """Retourne le chemin de destination du rendu final, crée le sous-dossier si besoin."""
+        nom_sans_ext = os.path.splitext(os.path.basename(chemin_source))[0]
+        
+        # Retirer le suffixe _OVP s'il est déjà présent
+        if nom_sans_ext.endswith("_OVP"):
+            nom_sans_ext = nom_sans_ext[:-4]
+        
+        # Remonter d'un niveau au-dessus de fundus_images/
+        dossier_parent = os.path.dirname(os.path.dirname(chemin_source))
+        dossier_rendus = os.path.join(dossier_parent, "fundus_rendu_images_finales")
+        os.makedirs(dossier_rendus, exist_ok=True)
+        return os.path.join(dossier_rendus, f"{nom_sans_ext}_OVP_rendu.png")
+
+
+    def sauvegarder_rendus(self):
+        """Sauvegarde les rendus fusionnés dans le sous-dossier 'fundus_rendu_images_finales'
+        du dossier d'images. Permet de mettre à jour des rendus déjà créés ou de créer
+        des rendus pour des images non traitées."""
+
+        # --- Première question : confirmer la mise à jour ---
+        questionRendu = StyledMessageBox(self)
+        questionRendu.setWindowTitle(self.T["dlg_rendus_maj_titre"])
+        questionRendu.setText(self.T["dlg_rendus_maj_texte"])
+        rendus_oui = questionRendu.addButton(self.T["dlg_rendus_btn_oui"], QMessageBox.ActionRole)
+        rendus_non = questionRendu.addButton(self.T["dlg_rendus_btn_non"], QMessageBox.ActionRole)
+        questionRendu.exec()
+
+        if questionRendu.clickedButton() == rendus_non:
+            return
+
+        # --- Deuxième question : tous ou seulement les retravaillés ---
+        quesRendu = StyledMessageBox(self)
+        quesRendu.setWindowTitle(self.T["dlg_rendus_maj_titre"])
+        quesRendu.setText(self.T["dlg_rendus_choix_texte"])
+        rend_tous         = quesRendu.addButton(self.T["dlg_rendus_btn_tous"],         QMessageBox.ActionRole)
+        rend_retravailles = quesRendu.addButton(self.T["dlg_rendus_btn_retravailles"], QMessageBox.ActionRole)
+        quesRendu.exec()
+
+        # --- Sauvegarde des retravaillés uniquement ---
+        if quesRendu.clickedButton() == rend_retravailles:
+            for chemin, config in self.config_par_image.items():
+                if config.get("modifie", False):
+                    rendu = self._generer_rendu_pour(chemin)
+                    if rendu:
+                        rendu.save(self._chemin_rendu_final(chemin), "JPEG", quality=95)
+            StyledMessageBox.information(self, self.T["dlg_rendus_maj_titre"], self.T["dlg_rendus_succes_retrav"])
+
+        # --- Sauvegarde de tous les rendus ---
+        elif quesRendu.clickedButton() == rend_tous:
+            tous_chemins = self.image_strip.strip_fundus.chemins
+            nb = len(tous_chemins)
+            erreurs = []
+            for i, chemin in enumerate(tous_chemins):
+                self.statusBar().showMessage(self.T["status_rendu_progress"].format(i=i+1, n=nb, nom=os.path.basename(chemin)))
+                QApplication.processEvents()
+                try:
+                    rendu = self._generer_rendu_pour(chemin)
+                    if rendu:
+                        chemin_dest = self._chemin_rendu_final(chemin)
+                        rendu.save(chemin_dest, "JPEG", quality=95)
+                except Exception as e:
+                    erreurs.append(f"{os.path.basename(chemin)} : {e}")
+            if erreurs:
+                StyledMessageBox.warning(self, self.T["dlg_rendus_maj_titre"],
+                    self.T["dlg_rendus_partiel"].format(ok=nb - len(erreurs), total=nb, erreurs="\n".join(erreurs)))
+            else:
+                self.statusBar().showMessage(self.T["dlg_rendus_succes_tous"].format(n=nb))
+                StyledMessageBox.information(self, self.T["dlg_rendus_maj_titre"], self.T["dlg_rendus_succes_tous"].format(n=nb))
+                
+            
 
     #-----------------ACTION 7: OUVRIR MESURES----------------
     def _init_toolbox(self):
@@ -1426,6 +1510,7 @@ class MainWindow(QMainWindow):
             self.addDockWidget(Qt.RightDockWidgetArea, self.toolbox)
             self.actAfficherToolbox.triggered.connect(self.toolbox.setVisible)
             self.toolbox.visibilityChanged.connect(self.actAfficherToolbox.setChecked)
+            self.toolbox.appliquer_langue(self.T)
         self.toolbox.show()
 
 
@@ -1507,13 +1592,13 @@ class MainWindow(QMainWindow):
                 QPushButton:hover { background: #205a32; }
                 QPushButton:checked { background: #1a4a2a; }
             """)
-            self.btn_mode_selection.setText("Quitter")
+            self.btn_mode_selection.setText(self.T["btn_selection_quitter"])
             self.btn_exporter_selection.setVisible(True)
             self.btn_precedent.setEnabled(False)
             self.btn_suivant.setEnabled(False)
         else:
             self.btn_mode_selection.setStyleSheet(self._style_button())
-            self.btn_mode_selection.setText("Sélection")
+            self.btn_mode_selection.setText(self.T["btn_selection_activer"])
             self.btn_exporter_selection.setVisible(False)
             self.btn_exporter_selection.setEnabled(False)
             self.btn_precedent.setEnabled(True)
@@ -1522,7 +1607,7 @@ class MainWindow(QMainWindow):
     def _on_selection_changed(self, chemins):
         """Met à jour le bouton de sauvegarde de sélection."""
         n = len(chemins)
-        self.btn_exporter_selection.setText(f"Sauvegarder ({n})")
+        self.btn_exporter_selection.setText(self.T["btn_sauvegarder_n"].format(n=n))
         self.btn_exporter_selection.setEnabled(n > 0)
 
     # ── Helpers partagés ────────────────────────────────────────────────
@@ -1533,11 +1618,11 @@ class MainWindow(QMainWindow):
             return True
 
         msgBox = StyledMessageBox(self)
-        msgBox.setWindowTitle("Sauvegarde")
-        msgBox.setText("Un fichier de configuration existe déjà.")
-        msgBox.setInformativeText("Mettre à jour les réglages ou créer un nouveau projet ?")
-        btn_maj = msgBox.addButton("Mettre à jour", QMessageBox.ActionRole)
-        msgBox.addButton("Nouveau projet",          QMessageBox.ActionRole)
+        msgBox.setWindowTitle(self.T["dlg_save_titre"])
+        msgBox.setText(self.T["dlg_save_config_existe"])
+        msgBox.setInformativeText(self.T["dlg_config_existe_info"])
+        btn_maj = msgBox.addButton(self.T["dlg_save_btn_maj"], QMessageBox.ActionRole)
+        msgBox.addButton(self.T["dlg_save_btn_nouveau"],       QMessageBox.ActionRole)
         msgBox.addButton(QMessageBox.Cancel)
         msgBox.exec()
 
@@ -1546,7 +1631,7 @@ class MainWindow(QMainWindow):
                 data_seg = self.segmentation_window.recup_image()
                 with open(chemin_config, 'w', encoding='utf-8') as f:
                     json.dump(data_seg, f, indent=4)
-                self.statusBar().showMessage("Réglages mis à jour avec succès.")
+                self.statusBar().showMessage(self.T["status_maj_reglages"])
             return False  # Ne pas continuer la sauvegarde
 
         return msgBox.standardButton(msgBox.clickedButton()) != QMessageBox.Cancel
@@ -1566,19 +1651,58 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[WARN] Masques non exportés pour {nom_ovp} : {e}")
 
+    def _trouver_json_pour_image(self, chemin_image: str) -> str | None:
+        """Retourne le chemin du fichier _data.json de mesures pour une image donnée,
+        en cherchant dans tous les emplacements connus (provisoire, archive, global)."""
+        if not self.chemin_dossier:
+            return None
+
+        nom_base = os.path.splitext(os.path.basename(chemin_image))[0]
+        while nom_base.endswith("_OVP"):
+            nom_base = nom_base[:-4]
+        nom_json = nom_base
+        nom_ovp  = f"{nom_base}_OVP"
+
+        dossier_image = os.path.dirname(chemin_image)
+        if os.path.basename(dossier_image) == "fundus_images":
+            dossier_image = os.path.dirname(dossier_image)
+        parent_image = os.path.dirname(dossier_image)
+
+        def candidats_pour(nom):
+            c = [
+                os.path.join(self.chemin_dossier, "mesures_json",          f"{nom}_data.json"),
+                os.path.join(self.chemin_dossier, "results", "mesures_json", f"{nom}_data.json"),
+                os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json"),
+                os.path.join(dossier_image, "results", "mesures_json",     f"{nom}_data.json"),
+            ]
+            c += glob.glob(os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP",
+                                        "results", "mesures_json", f"{nom}_data.json"))
+            c += glob.glob(os.path.join(parent_image, "*_fundus_images_code_OVP",
+                                        "results", "mesures_json", f"{nom}_data.json"))
+            return c
+
+        for nom in (nom_ovp, nom_json):
+            for c in candidats_pour(nom):
+                if c and os.path.exists(c):
+                    return c
+        return None
+
     def _archiver_mesures(self, dossier_result):
-        """Déplace mesures.csv et mesures_json/ vers dossier_result."""
+        """Copie mesures.csv et mesures_json/ vers dossier_result (sans écraser les fichiers existants)."""
         csv_src      = os.path.join(self.chemin_dossier, "mesures.csv")
         json_dir_src = os.path.join(self.chemin_dossier, "mesures_json")
 
         if os.path.exists(csv_src):
-            shutil.move(csv_src, os.path.join(dossier_result, "mesures_globales.csv"))
+            shutil.copy(csv_src, os.path.join(dossier_result, "mesures_globales.csv"))
 
         if os.path.exists(json_dir_src):
             json_dir_dest = os.path.join(dossier_result, "mesures_json")
-            if os.path.exists(json_dir_dest):
-                shutil.rmtree(json_dir_dest)
-            shutil.move(json_dir_src, json_dir_dest)
+            os.makedirs(json_dir_dest, exist_ok=True)
+            for f in os.listdir(json_dir_src):
+                src_f  = os.path.join(json_dir_src, f)
+                dest_f = os.path.join(json_dir_dest, f)
+                if os.path.isfile(src_f):
+                    shutil.copy(src_f, dest_f)   # copie (écrase si même nom, mais préserve les autres)
 
     # ── Sauvegarde d'une seule image ────────────────────────────────────
 
@@ -1617,6 +1741,11 @@ class MainWindow(QMainWindow):
                               (mesures.get("json"), f"{nom_ovp}_data.json")]:
                 if src and os.path.exists(src):
                     shutil.copy(src, os.path.join(dossier_result, dest))
+        else:
+            # Fallback : chercher le JSON de mesures sur le disque
+            json_src = self._trouver_json_pour_image(chemin_image)
+            if json_src:
+                shutil.copy(json_src, os.path.join(dossier_result, f"{nom_ovp}_data.json"))
 
         return dossier_projet
 
@@ -1625,21 +1754,21 @@ class MainWindow(QMainWindow):
     def _save_groupe(self, chemins):
         """Logique commune à _save_toutes_images et _save_images_selectionnees."""
         if not chemins:
-            self.statusBar().showMessage("Aucune image chargée.")
+            self.statusBar().showMessage(self.T["status_aucune_image_chargee"])
             return
         if self.chemin_dossier is None:
-            StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
+            StyledMessageBox.warning(self, self.T["dlg_save_erreur_titre"], self.T["dlg_save_aucun_dossier"])
             return
 
-        sauv_fichier, ok = QInputDialog.getText(self, 'Sauvegarde', 'Nom du nouveau projet :')
+        sauv_fichier, ok = QInputDialog.getText(self, self.T["dlg_save_groupe_titre"], self.T["dlg_save_groupe_nom"])
         if not ok or not sauv_fichier.strip():
             return
 
         msgBox = StyledMessageBox(self)
-        msgBox.setWindowTitle("Sauvegarde des images")
-        msgBox.setText("Un dossier par image (1) ou un dossier pour toutes les images (2) ?")
-        btn_par_image = msgBox.addButton("1", QMessageBox.ActionRole)
-        btn_global    = msgBox.addButton("2", QMessageBox.ActionRole)
+        msgBox.setWindowTitle(self.T["dlg_save_all_titre"])
+        msgBox.setText(self.T["dlg_save_groupe_texte"])
+        btn_par_image = msgBox.addButton(self.T["dlg_save_all_btn1"], QMessageBox.ActionRole)
+        btn_global    = msgBox.addButton(self.T["dlg_save_all_btn2"], QMessageBox.ActionRole)
         msgBox.addButton(QMessageBox.Cancel)
         msgBox.exec()
 
@@ -1650,10 +1779,10 @@ class MainWindow(QMainWindow):
 
         if msgBox.clickedButton() == btn_par_image:
             msgRendu = StyledMessageBox(self)
-            msgRendu.setWindowTitle("Rendus finaux")
-            msgRendu.setText("Exporter tous les rendus ou seulement les images modifiées ?")
-            btn_tous  = msgRendu.addButton("Tous",      QMessageBox.ActionRole)
-            btn_modif = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
+            msgRendu.setWindowTitle(self.T["dlg_rendus_titre"])
+            msgRendu.setText(self.T["dlg_rendus_texte"])
+            btn_tous  = msgRendu.addButton(self.T["dlg_rendus_btn_tous"],  QMessageBox.ActionRole)
+            btn_modif = msgRendu.addButton(self.T["dlg_rendus_btn_modif"], QMessageBox.ActionRole)
             msgRendu.addButton(QMessageBox.Cancel)
             msgRendu.exec()
 
@@ -1665,7 +1794,7 @@ class MainWindow(QMainWindow):
             os.makedirs(dossier_dest, exist_ok=True)
 
             for i, chemin in enumerate(chemins):
-                self.statusBar().showMessage(f"Sauvegarde {i+1}/{nb} — {os.path.basename(chemin)}…")
+                self.statusBar().showMessage(self.T["status_sauvegarde_progress"].format(i=i+1, n=nb, nom=os.path.basename(chemin)))
                 QApplication.processEvents()
                 try:
                     nom_base  = os.path.splitext(os.path.basename(chemin))[0]
@@ -1704,16 +1833,20 @@ class MainWindow(QMainWindow):
                                           (mesures.get("json"), f"{nom_ovp}_data.json")]:
                             if src and os.path.exists(src):
                                 shutil.copy(src, os.path.join(dossier_result, dest))
+                    else:
+                        json_src = self._trouver_json_pour_image(chemin)
+                        if json_src:
+                            shutil.copy(json_src, os.path.join(dossier_result, f"{nom_ovp}_data.json"))
 
                 except Exception as e:
                     erreurs.append(f"{os.path.basename(chemin)} : {e}")
 
         else:
             msgRendu = StyledMessageBox(self)
-            msgRendu.setWindowTitle("Rendus finaux")
-            msgRendu.setText("Exporter tous les rendus ou seulement les images modifiées ?")
-            btn_tous  = msgRendu.addButton("Tous",      QMessageBox.ActionRole)
-            btn_modif = msgRendu.addButton("Modifiées", QMessageBox.ActionRole)
+            msgRendu.setWindowTitle(self.T["dlg_rendus_titre"])
+            msgRendu.setText(self.T["dlg_rendus_texte"])
+            btn_tous  = msgRendu.addButton(self.T["dlg_rendus_btn_tous"],  QMessageBox.ActionRole)
+            btn_modif = msgRendu.addButton(self.T["dlg_rendus_btn_modif"], QMessageBox.ActionRole)
             msgRendu.addButton(QMessageBox.Cancel)
             msgRendu.exec()
 
@@ -1730,7 +1863,7 @@ class MainWindow(QMainWindow):
                 os.makedirs(d, exist_ok=True)
 
             for i, chemin in enumerate(chemins):
-                self.statusBar().showMessage(f"Sauvegarde {i+1}/{nb} — {os.path.basename(chemin)}…")
+                self.statusBar().showMessage(self.T["status_sauvegarde_progress"].format(i=i+1, n=nb, nom=os.path.basename(chemin)))
                 QApplication.processEvents()
                 try:
                     nom_base  = os.path.splitext(os.path.basename(chemin))[0]
@@ -1754,27 +1887,43 @@ class MainWindow(QMainWindow):
                         with open(os.path.join(dossier_fundus, f"{nom_ovp}_config.json"), 'w', encoding='utf-8') as f:
                             json.dump(config, f, indent=4, default=str)
 
+                    # Mesures individuelles : via mesures_par_image ou recherche disque
+                    mesures = self.mesures_par_image.get(chemin)
+                    if mesures:
+                        json_src = mesures.get("json")
+                        if json_src and os.path.exists(json_src):
+                            dest_json_dir = os.path.join(dossier_result, "mesures_json")
+                            os.makedirs(dest_json_dir, exist_ok=True)
+                            shutil.copy(json_src, os.path.join(dest_json_dir, f"{nom_ovp}_data.json"))
+                    else:
+                        json_src = self._trouver_json_pour_image(chemin)
+                        if json_src:
+                            dest_json_dir = os.path.join(dossier_result, "mesures_json")
+                            os.makedirs(dest_json_dir, exist_ok=True)
+                            shutil.copy(json_src, os.path.join(dest_json_dir, f"{nom_ovp}_data.json"))
+
                 except Exception as e:
                     erreurs.append(f"{os.path.basename(chemin)} : {e}")
 
             self._archiver_mesures(dossier_result)
 
         if erreurs:
-            StyledMessageBox.warning(self, "Sauvegarde partielle",
-                f"{nb - len(erreurs)}/{nb} images sauvegardées.\n\nErreurs :\n" + "\n".join(erreurs))
+            StyledMessageBox.warning(self, self.T["dlg_save_titre"],
+                self.T["dlg_save_all_partiel"].format(ok=nb - len(erreurs), total=nb, erreurs="\n".join(erreurs)))
         else:
-            self.statusBar().showMessage(f"{nb} images sauvegardées.")
-            StyledMessageBox.information(self, "Succès", f"{nb} images sauvegardées dans :\n{dossier_dest}")
+            self.statusBar().showMessage(self.T["status_n_images"].format(n=nb))
+            StyledMessageBox.information(self, self.T["dlg_save_succes_titre"],
+                self.T["dlg_save_all_succes"].format(n=nb, chemin=dossier_dest))
 
     # ── Points d'entrée publics ─────────────────────────────────────────
 
     def save(self):
         """Sauvegarde l'image courante dans un nouveau projet _OVP."""
         if not self.chemin_image:
-            self.statusBar().showMessage("Aucune image à enregistrer.")
+            self.statusBar().showMessage(self.T["status_aucune_image_a_enregistrer"])
             return
         if self.chemin_dossier is None:
-            StyledMessageBox.warning(self, "Erreur", "Aucun dossier de travail défini.")
+            StyledMessageBox.warning(self, self.T["dlg_save_erreur_titre"], self.T["dlg_save_aucun_dossier"])
             return
 
         chemin_config = os.path.join(os.path.dirname(self.path_image_courante), "config_segmentation.json")
@@ -1805,10 +1954,12 @@ class MainWindow(QMainWindow):
                     shutil.rmtree(json_dir_dest)
                 shutil.move(json_dir_src, json_dir_dest)
 
-            self.statusBar().showMessage(f"Projet « {nom_ovp} » enregistré.")
-            StyledMessageBox.information(self, "Succès", f"Projet créé :\n{dossier_projet}")
+            self.statusBar().showMessage(self.T["status_projet_enregistre"].format(nom=nom_ovp))
+            StyledMessageBox.information(self, self.T["dlg_save_succes_titre"],
+                self.T["dlg_save_projet_succes"].format(chemin=dossier_projet))
         except Exception as e:
-            StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
+            StyledMessageBox.critical(self, self.T["dlg_save_erreur_titre"],
+                self.T["dlg_save_erreur_texte"].format(erreur=str(e)))
 
     def _save_image_courante(self):
         """Sauvegarde uniquement l'image affichée (choix du dossier libre)."""
@@ -1816,16 +1967,18 @@ class MainWindow(QMainWindow):
         if not self._check_config_existante(chemin_config):
             return
 
-        dossier_dest = QFileDialog.getExistingDirectory(self, "Choisir le dossier de destination")
+        dossier_dest = QFileDialog.getExistingDirectory(self, self.T["dlg_save_titre"])
         if not dossier_dest:
             return
 
         try:
             dossier_projet = self._save_une_image(self.chemin_image, dossier_dest)
-            self.statusBar().showMessage("Image sauvegardée.")
-            StyledMessageBox.information(self, "Succès", f"Image sauvegardée :\n{dossier_projet}")
+            self.statusBar().showMessage(self.T["status_sauvegarde"])
+            StyledMessageBox.information(self, self.T["dlg_save_succes_titre"],
+                self.T["dlg_save_succes_texte"].format(chemin=dossier_projet))
         except Exception as e:
-            StyledMessageBox.critical(self, "Erreur", f"Erreur de sauvegarde : {str(e)}")
+            StyledMessageBox.critical(self, self.T["dlg_save_erreur_titre"],
+                self.T["dlg_save_erreur_texte"].format(erreur=str(e)))
 
     def _save_toutes_images(self):
         self._save_groupe(self.image_strip.strip_fundus.chemins)
@@ -1833,8 +1986,8 @@ class MainWindow(QMainWindow):
     def _save_images_selectionnees(self):
         chemins = self.image_strip.strip_fundus.chemins_selectionnes()
         if not chemins:
-            StyledMessageBox.information(self, "Sélection vide",
-                "Aucune image sélectionnée.\nCliquez sur des miniatures pour en cocher.")
+            StyledMessageBox.information(self, self.T["dlg_selection_vide_titre"],
+                self.T["dlg_selection_vide_texte"])
             return
         self._save_groupe(chemins)
 

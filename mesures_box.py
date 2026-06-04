@@ -129,51 +129,54 @@ class MesuresToolbox(QDockWidget):
         self.cb_veines  = QCheckBox("Veines")
         self.cb_arteres = QCheckBox("Arteres")
         self.cb_les2    = QCheckBox("Arteres + Veines")
-        layout.addWidget(self.groupe(
+        self.group_vaisseaux = self.groupe(
             "Type de vaisseaux",
             [self.cb_veines, self.cb_arteres, self.cb_les2]
-        ))
+        )
+        layout.addWidget(self.group_vaisseaux)
 
         # Zones
         self.cb_zoneA   = QCheckBox("Zone A")
         self.cb_zoneB   = QCheckBox("Zone B")
         self.cb_zoneC   = QCheckBox("Zone C")
-        self.cb_zoneAll = QCheckBox("All")
-        self.cb_zoneOut = QCheckBox("Out")
+        self.cb_zoneAll = QCheckBox("Tout")
+        self.cb_zoneOut = QCheckBox("Rien")
         zone_cbs = [self.cb_zoneA, self.cb_zoneB, self.cb_zoneC, self.cb_zoneAll, self.cb_zoneOut]
 
-        btn_tout = QPushButton("Tout")
-        btn_tout.setObjectName("btn_tout")
-        btn_rien = QPushButton("Rien")
-        btn_rien.setObjectName("btn_rien")
-        btn_tout.clicked.connect(lambda: [cb.setChecked(True)  for cb in zone_cbs])
-        btn_rien.clicked.connect(lambda: [cb.setChecked(False) for cb in zone_cbs])
-        btn_tout.clicked.connect(self.update_lancer_btn)
-        btn_rien.clicked.connect(self.update_lancer_btn)
+        self.btn_tout = QPushButton("Tout")
+        self.btn_tout.setObjectName("btn_tout")
+        self.btn_rien = QPushButton("Rien")
+        self.btn_rien.setObjectName("btn_rien")
+        self.btn_tout.clicked.connect(lambda: [cb.setChecked(True)  for cb in zone_cbs])
+        self.btn_rien.clicked.connect(lambda: [cb.setChecked(False) for cb in zone_cbs])
+        self.btn_tout.clicked.connect(self.update_lancer_btn)
+        self.btn_rien.clicked.connect(self.update_lancer_btn)
 
-        layout.addWidget(self.groupe("Zones", zone_cbs,
-                                      extra_buttons=[btn_tout, btn_rien]))
+        self.group_zones = self.groupe("Zones", zone_cbs,
+                                      extra_buttons=[self.btn_tout, self.btn_rien])
+        layout.addWidget(self.group_zones)
 
         # Groupes d'actions
-        self.cb_quality      = QCheckBox("quality control")
-        self.cb_vessel   = QCheckBox("vessel detection")
-        self.cb_geo  = QCheckBox("geometric metrics")
+        self.cb_quality      = QCheckBox("Contrôle qualité")
+        self.cb_vessel   = QCheckBox("Détection vaisseaux")
+        self.cb_geo  = QCheckBox("métriques géométriques")
 
         groupes_cbs = [self.cb_quality, self.cb_vessel,
                        self.cb_geo]
-        btn_tout2 = QPushButton("Tout")
-        btn_tout2.setObjectName("btn_tout")
-        btn_rien2 = QPushButton("Rien")
-        btn_rien2.setObjectName("btn_rien")
-        btn_tout2.clicked.connect(lambda: [cb.setChecked(True)  for cb in groupes_cbs])
-        btn_rien2.clicked.connect(lambda: [cb.setChecked(False) for cb in groupes_cbs])
-        btn_tout2.clicked.connect(self.update_lancer_btn)
-        btn_rien2.clicked.connect(self.update_lancer_btn)
+        self.btn_tout2 = QPushButton("Tout")
+        self.btn_tout2.setObjectName("btn_tout")
+        self.btn_rien2 = QPushButton("Rien")
+        self.btn_rien2.setObjectName("btn_rien")
+        self.btn_tout2.clicked.connect(lambda: [cb.setChecked(True)  for cb in groupes_cbs])
+        self.btn_rien2.clicked.connect(lambda: [cb.setChecked(False) for cb in groupes_cbs])
+        self.btn_tout2.clicked.connect(self.update_lancer_btn)
+        self.btn_rien2.clicked.connect(self.update_lancer_btn)
         
-        layout.addWidget(self.groupe(
+        self.group_actions = self.groupe(
             "Groupes d'actions",
-            groupes_cbs, extra_buttons=[btn_tout2, btn_rien2]
-        ))
+            groupes_cbs, extra_buttons=[self.btn_tout2, self.btn_rien2]
+        )
+        layout.addWidget(self.group_actions)
 
         # Bouton Lancer
         self.btn_lancer = QPushButton("Afficher les mesures")
@@ -283,35 +286,35 @@ class MesuresToolbox(QDockWidget):
     def lancer_mesures(self):
         vaisseaux, zones, groupes = self.selections()
 
+        parent = self.parent()
+        T = getattr(parent, "T", None) if parent else None
+
         if not vaisseaux or not zones or not groupes:
-            QMessageBox.warning(self, "Sélection incomplète",
-                                "Cochez au moins un élément dans chaque groupe.")
+            titre = T["mes_dlg_incomplete_titre"] if T else "Sélection incomplète"
+            texte = T["mes_dlg_incomplete_texte"] if T else "Cochez au moins un élément dans chaque groupe."
+            QMessageBox.warning(self, titre, texte)
             return
 
             print(f"[DEBUG] chemin_json_courant = {self.chemin_json_courant}")
             print(f"[DEBUG] existe = {os.path.exists(self.chemin_json_courant) if self.chemin_json_courant else 'N/A'}")
-            if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):           
-                QMessageBox.critical(self, "Erreur",
-                "Aucune mesure disponible pour cette image.\n"
-                "Lancez d'abord les mesures.")
+            if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
+                titre_err = T["mes_dlg_aucune_mesure_titre"] if T else "Erreur"
+                texte_err = T["mes_dlg_aucune_mesure_texte"] if T else "Aucune mesure disponible pour cette image.\nLancez d'abord les mesures."
+                QMessageBox.critical(self, titre_err, texte_err)
             return
 
-
-        
-        try :    
+        try:
             with open(self.chemin_json_courant, 'r', encoding='utf-8') as f:
                 data_test = json.load(f)
 
-
                 resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
-
-
 
             if resultat:
                 self.remplir_interface(resultat)
 
         except Exception as e:
-             QMessageBox.critical(self, "Erreur", f"Erreur : {str(e)}")
+            titre_err = T["mes_dlg_aucune_mesure_titre"] if T else "Erreur"
+            QMessageBox.critical(self, titre_err, f"Erreur : {str(e)}")
     
     def appliquer_langue(self, T: dict):
         """Met à jour tous les textes de la toolbox mesures."""
@@ -320,6 +323,9 @@ class MesuresToolbox(QDockWidget):
         self.cb_veines.setText(T["mes_cb_veines"])
         self.cb_arteres.setText(T["mes_cb_arteres"])
         self.cb_les2.setText(T["mes_cb_les2"])
+        
+        self.cb_zoneAll.setText(T["mes_cb_zoneAll"])
+        self.cb_zoneOut.setText(T["mes_cb_zoneOut"])
  
         self.cb_quality.setText(T["mes_cb_quality"])
         self.cb_vessel.setText(T["mes_cb_vessel"])
@@ -327,6 +333,17 @@ class MesuresToolbox(QDockWidget):
  
         self.btn_lancer.setText(T["mes_btn_afficher"])
         self.btn_export.setText(T["mes_btn_exporter"])
+
+        # Groupes
+        self.group_vaisseaux.setTitle(T["mes_groupe_vaisseaux"])
+        self.group_zones.setTitle(T["mes_groupe_zones"])
+        self.group_actions.setTitle(T["mes_groupe_actions"])
+
+        # Boutons Tout/Rien
+        self.btn_tout.setText(T["mes_btn_tout"])
+        self.btn_rien.setText(T["mes_btn_rien"])
+        self.btn_tout2.setText(T["mes_btn_tout"])
+        self.btn_rien2.setText(T["mes_btn_rien"])
  
         self.tree.setHeaderLabels([T["mes_tree_col_prop"], T["mes_tree_col_val"]])
 
@@ -337,10 +354,14 @@ class MesuresToolbox(QDockWidget):
             print("Erreur : remplir_interface a reçu des données invalides.")
             return
 
+        parent = self.parent()
+        T = getattr(parent, "T", None) if parent else None
+        lbl_image = T["mes_tree_image"] if T else "IMAGE ANALYSÉE"
+
         self.tree.clear()
 
         image_id = data.get("IMAGE_ID", "Inconnue")
-        QTreeWidgetItem(self.tree, ["IMAGE ANALYSÉE", str(image_id)])
+        QTreeWidgetItem(self.tree, [lbl_image, str(image_id)])
         
         for organe, zones in data.items():
             if organe == "IMAGE_ID" or not isinstance(zones, dict):
@@ -372,27 +393,35 @@ class MesuresToolbox(QDockWidget):
     def exporter_resultats(self):
         vaisseaux, zones, groupes = self.selections()
 
+        parent = self.parent()
+        T = getattr(parent, "T", None) if parent else None
+
+        def t(key, fallback): return T[key] if T else fallback
+
         msgBox = QMessageBox(self)
-        msgBox.setWindowTitle("Export des mesures")
-        msgBox.setText("Que voulez-vous exporter ?")
-        btn_cette = msgBox.addButton("Cette image", QMessageBox.ActionRole)
-        btn_toutes = msgBox.addButton("Toutes les images", QMessageBox.ActionRole)
+        msgBox.setWindowTitle(t("mes_dlg_export_titre", "Export des mesures"))
+        msgBox.setText(t("mes_dlg_export_texte", "Que voulez-vous exporter ?"))
+        btn_cette  = msgBox.addButton(t("mes_dlg_export_btn_cette",  "Cette image"),       QMessageBox.ActionRole)
+        btn_toutes = msgBox.addButton(t("mes_dlg_export_btn_toutes", "Toutes les images"), QMessageBox.ActionRole)
         msgBox.addButton(QMessageBox.Cancel)
         msgBox.exec()
 
         if msgBox.clickedButton() not in (btn_cette, btn_toutes):
             return
 
+        filtre = t("mes_export_filtre", "Fichiers Texte (*.txt)")
         chemin_save, _ = QFileDialog.getSaveFileName(
-            self, "Enregistrer le rapport", "rapport_mesures.txt", "Fichiers Texte (*.txt)"
+            self, t("mes_export_titre", "Enregistrer le rapport"), "rapport_mesures.txt", filtre
         )
         if not chemin_save:
             return
 
+        err_titre = t("mes_dlg_aucune_mesure_titre", "Erreur")
+
         if msgBox.clickedButton() == btn_cette:
-            # Export image courante uniquement
             if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
-                QMessageBox.warning(self, "Erreur", "Aucune mesure disponible pour cette image.")
+                QMessageBox.warning(self, err_titre,
+                    t("mes_dlg_aucune_mesure_texte", "Aucune mesure disponible pour cette image."))
                 return
             try:
                 with open(self.chemin_json_courant, 'r', encoding='utf-8') as f:
@@ -400,14 +429,17 @@ class MesuresToolbox(QDockWidget):
                 resultat = rc.requete(data_test, organe=vaisseaux, zone=zones, groupe=groupes)
                 if resultat:
                     rc.export_txt(resultat, chemin_save)
-                    QMessageBox.information(self, "Export réussi", f"Rapport enregistré :\n{chemin_save}")
+                    QMessageBox.information(self,
+                        t("mes_export_succes_titre", "Export réussi"),
+                        t("mes_export_succes_texte", "Le rapport a été enregistré ici :\n{chemin}").format(chemin=chemin_save))
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur : {str(e)}")
+                QMessageBox.critical(self, err_titre, f"Erreur : {str(e)}")
 
         else:
             dossier_json = os.path.dirname(self.chemin_json_courant)
             if not os.path.exists(dossier_json):
-                QMessageBox.warning(self, "Erreur", "Dossier des mesures introuvable.")
+                QMessageBox.warning(self, err_titre,
+                    t("mes_dlg_aucune_mesure_texte", "Dossier des mesures introuvable."))
                 return
 
             try:
@@ -430,7 +462,9 @@ class MesuresToolbox(QDockWidget):
                                 f_out.write("\n")
                             os.remove(tmp_path)
 
-                QMessageBox.information(self, "Export réussi",
-                    f"Rapport de toutes les images enregistré :\n{chemin_save}")
+                QMessageBox.information(self,
+                    t("mes_export_succes_titre", "Export réussi"),
+                    t("mes_export_succes_toutes_texte",
+                      "Rapport de toutes les images enregistré :\n{chemin}").format(chemin=chemin_save))
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur : {str(e)}")
+                QMessageBox.critical(self, err_titre, f"Erreur : {str(e)}")

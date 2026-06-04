@@ -172,6 +172,7 @@ class SegmentationToolbox(QDockWidget):
 
     QPushButton#btn_valider        { color: #000000;
 }
+    QPushButton#maj_rendu         { color: #000000; }
     QPushButton#btn_valider:disabled { background: #bbbbcc; color: #888899; }
     QPushButton#btn_lancer         { color: #000000;  background: #ffffff; }
     QPushButton#btn_lancer:disabled { background: #bbbbcc; color: #888899; }
@@ -249,6 +250,10 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.setObjectName("btn_couleur_veines")
         self.btn_couleur_arteres.setObjectName("btn_couleur_arteres")
         self.btn_couleur_disque.setObjectName("btn_couleur_disque")
+        
+        self.maj_rendu_sauvegarde = QPushButton("Sauvegarder les rendus")
+        self.maj_rendu_sauvegarde.setObjectName("maj_rendu")
+        self.maj_rendu_sauvegarde.clicked.connect(self._sauvegarder_rendus)
 
         
 
@@ -264,17 +269,25 @@ class SegmentationToolbox(QDockWidget):
         self.setWidget(scroll)
 
         # Groupe couches
-        self.main_layout.addWidget(self._groupe("Couches disponibles", [
-            self.cb_veines, self.cb_arteres, self.cb_disque,self.btn_creer_disque,
+        self.group_couches = self._groupe("Couches disponibles", [
+            self.cb_veines, self.cb_arteres, self.cb_disque, self.btn_creer_disque,
             self.btn_editer, self.btn_valider,
-        ]))
+        ])
+        self.main_layout.addWidget(self.group_couches)
 
         # Groupe couleurs
-        self.main_layout.addWidget(self._groupe("Modifier les couleurs", [
+        self.group_couleurs = self._groupe("Modifier les couleurs", [
             self.btn_couleur_veines,
             self.btn_couleur_arteres,
             self.btn_couleur_disque,
-        ]))
+        ])
+        self.main_layout.addWidget(self.group_couleurs)
+
+        # Groupe rendus
+        self.group_rendus = self._groupe("Rendus du dossier d'images", [
+            self.maj_rendu_sauvegarde
+        ])
+        self.main_layout.addWidget(self.group_rendus)
 
         # Bouton principal
         self.main_layout.addWidget(self.btn_lancer)
@@ -434,6 +447,11 @@ class SegmentationToolbox(QDockWidget):
         parent = self.parent()
         if parent and hasattr(parent, "modif_couleurs"):
             parent.modif_couleurs(key, color_modif)
+            
+    def _sauvegarder_rendus(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "sauvegarder_rendus"):
+            parent.sauvegarder_rendus()
 
     def _on_creer_disque(self):
         parent = self.parent()
@@ -453,12 +471,21 @@ class SegmentationToolbox(QDockWidget):
             print("Erreur : le parent ne peut pas modifier le disque")
 
     def _on_valider_disque(self):
+        parent = self.parent()
+        T = getattr(parent, "T", None) if parent else None
+
+        titre  = T["seg_dlg_valider_titre"] if T else "Valider le disque optique"
+        texte  = T["seg_dlg_valider_texte"]  if T else "Validation du disque optique"
+        info   = T["seg_dlg_valider_info"]   if T else "Êtes-vous sûr de vouloir valider le disque optique ?"
+        oui    = T["seg_dlg_valider_oui"]    if T else "Oui"
+        non    = T["seg_dlg_valider_non"]    if T else "Non"
+
         rep = StyledMessageBox(self)
-        rep.setWindowTitle("Valider des disques optiques")
-        rep.setText("Validation des disques optiques")
-        rep.setInformativeText("Les disques optiques du dossier sont-ils tous correctement positionnés ?")
-        btn_oui= rep.addButton("Oui", QMessageBox.ActionRole)
-        btn_non = rep.addButton("Non", QMessageBox.ActionRole)
+        rep.setWindowTitle(titre)
+        rep.setText(texte)
+        rep.setInformativeText(info)
+        btn_oui = rep.addButton(oui, QMessageBox.ActionRole)
+        btn_non = rep.addButton(non, QMessageBox.ActionRole)
         rep.exec()
         if rep.clickedButton() == btn_oui:
             self.btn_lancer.setEnabled(True)
@@ -555,12 +582,19 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.setText(T["seg_btn_couleur_veines"])
         self.btn_couleur_arteres.setText(T["seg_btn_couleur_arteres"])
         self.btn_couleur_disque.setText(T["seg_btn_couleur_disque"])
+        
+        #Boutons maj rendu
+        self.maj_rendu_sauvegarde.setText(T["btn_maj_rendu"])
  
         # Groupes (QGroupBox)
+        self.group_couches.setTitle(T["seg_groupe_couches"])
+        self.group_couleurs.setTitle(T["seg_groupe_couleurs"])
+        self.group_rendus.setTitle(T["seg_groupe_rendus"])
         self.groups["veines"].setTitle(T["seg_opacite_veines"])
         self.groups["arteres"].setTitle(T["seg_opacite_arteres"])
         self.groups["disque"].setTitle(T["seg_opacite_disque"])
         self.groups["image"].setTitle(T["seg_opacite_image"])
+    
  
         # Mettre à jour COLOR_CONFIG pour les futurs dialogues couleur
         self._color_config_local = {
