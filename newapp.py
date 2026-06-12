@@ -597,7 +597,10 @@ class MainWindow(QMainWindow):
         self.initial_pos = None
         self.topbar.hide()
 
-
+    def resource_path(self,relative_path):
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(os.path.dirname(__file__), relative_path)
 
     def _init_accueil(self):
         """Affiche la page d'accueil ."""
@@ -609,7 +612,7 @@ class MainWindow(QMainWindow):
 
         # Logo
         self.logo = QLabel(self.btn_container)
-        logo_pixmap = QPixmap("OPV3.png")
+        logo_pixmap = QPixmap(self.resource_path("OPV3.png"))
         ecran = QApplication.primaryScreen().availableGeometry()
         logo_pixmap = logo_pixmap.scaled(
             ecran.height() // 2, ecran.width() // 2,

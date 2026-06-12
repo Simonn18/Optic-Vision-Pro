@@ -1,10 +1,4 @@
-#installer pyinstaller 
-pip3 install PySide6 PyInstaller
-
-si fichier dist pas encore créer.
-    pyinstaller --windowed main.py
-
-pour lancer les mise à jour de l'appli:
-        pyinstaller --windowed main.spec
-
-application se trouve dans le dossier dist
+1. Installe Python
+2. Installe tes dépendances (pip install -r requirements.txt)
+3. Installe PyInstaller (pip install pyinstaller)
+4. Relance pyinstaller newapp.spec
