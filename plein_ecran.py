@@ -1,1 +1,0 @@
-#oublie de l'enlever des imports donc application le cherche mais si jamais, relancer le newapp.py en pyinstaller sans l'import de ce fichier et c'est good :)

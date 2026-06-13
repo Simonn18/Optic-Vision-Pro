@@ -295,12 +295,12 @@ class MesuresToolbox(QDockWidget):
             QMessageBox.warning(self, titre, texte)
             return
 
-            print(f"[DEBUG] chemin_json_courant = {self.chemin_json_courant}")
-            print(f"[DEBUG] existe = {os.path.exists(self.chemin_json_courant) if self.chemin_json_courant else 'N/A'}")
-            if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
-                titre_err = T["mes_dlg_aucune_mesure_titre"] if T else "Erreur"
-                texte_err = T["mes_dlg_aucune_mesure_texte"] if T else "Aucune mesure disponible pour cette image.\nLancez d'abord les mesures."
-                QMessageBox.critical(self, titre_err, texte_err)
+        # Vérifier qu'une mesure existe pour l'image courante : sinon message clair
+        # (au lieu d'un open(None) / fichier manquant qui planterait).
+        if not self.chemin_json_courant or not os.path.exists(self.chemin_json_courant):
+            titre_err = T["mes_dlg_aucune_mesure_titre"] if T else "Erreur"
+            texte_err = T["mes_dlg_aucune_mesure_texte"] if T else "Aucune mesure disponible pour cette image.\nLancez d'abord les mesures."
+            QMessageBox.critical(self, titre_err, texte_err)
             return
 
         try:

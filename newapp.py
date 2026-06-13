@@ -8,17 +8,17 @@ import glob
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QScrollArea, QLabel, QFileDialog, QGraphicsScene,
-    QGraphicsView, QSizePolicy, QMessageBox, QGraphicsItem, QInputDialog
+    QGraphicsView, QSizePolicy, QMessageBox, QGraphicsItem, QInputDialog,
+    QDialog, QProgressBar
 )
 
 import struct
 from PySide6 import QtGui
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QPixmap, QIcon, QPainter, QAction  ,QImage, QColor
 
 import opacite as op
-import mesures_box as mb          
-import plein_ecran as pe
+import mesures_box as mb
 import segmentation3 as seg
 import measurements as m_script
 import read_csv as rc
@@ -65,6 +65,32 @@ MSG_STYLE = """
     }
     QMessageBox QPushButton:pressed {
         background-color: #5555aa;
+    }
+"""
+
+LOADING_STYLE = """
+    QDialog {
+        background-color: #1e1e2e;
+        border: 1px solid #3a3a5a;
+        border-radius: 10px;
+        color: #ffffff;
+    }
+    QLabel {
+        color: #e0e0f0;
+        font-size: 13px;
+        padding: 6px;
+        background: transparent;
+    }
+    QProgressBar {
+        border: 1px solid #5555aa;
+        border-radius: 6px;
+        background-color: #2e2e4e;
+        height: 16px;
+        text-align: center;
+    }
+    QProgressBar::chunk {
+        background-color: #5555aa;
+        border-radius: 5px;
     }
 """
 
@@ -435,6 +461,64 @@ class ImageStripContainer(QWidget):
             self.strip_fundus._selectionner(index)
 
 
+class _MesureWorker(QThread):
+    """Exécute le calcul des mesures (measurements.main + conversion CSV->JSON)
+    hors du thread principal, pour ne pas geler l'interface."""
+    termine = Signal()
+    erreur  = Signal(str)
+
+    def __init__(self, args, csv_root, racine_calcul):
+        super().__init__()
+        self._args = args
+        self._csv_root = csv_root
+        self._racine = racine_calcul
+
+    def run(self):
+        try:
+            m_script.main(self._args)
+            rc.csv_to_jsons(self._csv_root, self._racine)
+            self.termine.emit()
+        except Exception as e:
+            # Attrape aussi les erreurs internes de measurements.py
+            # (y compris le TypeError des `raise "..."`), au lieu de planter.
+            self.erreur.emit(str(e))
+
+
+class _LoadingPopup(QDialog):
+    """Pop-up de chargement NON-modal, au style des StyledMessageBox.
+    L'application reste utilisable pendant le calcul."""
+
+    def __init__(self, parent, texte):
+        super().__init__(parent)
+        self.setWindowTitle("Mesures")
+        self.setModal(False)                       # l'appli reste utilisable
+        self.setStyleSheet(LOADING_STYLE)
+        self.setFixedWidth(380)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(14)
+
+        label = QLabel(texte)
+        label.setAlignment(Qt.AlignCenter)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        barre = QProgressBar()
+        barre.setRange(0, 0)                       # barre indéterminée (animation continue)
+        barre.setTextVisible(False)
+        layout.addWidget(barre)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Centrer sur la fenêtre parente
+        par = self.parent()
+        if par is not None:
+            geo = par.frameGeometry()
+            self.move(geo.center().x() - self.width() // 2,
+                      geo.center().y() - self.height() // 2)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -790,10 +874,8 @@ class MainWindow(QMainWindow):
         if chemin_dossier:
             StyledMessageBox.information(self, self.T["dlg_dossier_titre"], self.T["dlg_dossier_texte"].format(nom=chemin_dossier))
             self.chemin_dossier = chemin_dossier
-            print(self.chemin_dossier)
         else:
             StyledMessageBox.warning(self, self.T["dlg_dossier_erreur_titre"], self.T["dlg_dossier_erreur_texte"])
-            print(self.chemin_dossier)
 
     @staticmethod
     def _styled_msgbox(parent, titre: str, texte: str, info: str = "") -> StyledMessageBox:
@@ -1027,49 +1109,57 @@ class MainWindow(QMainWindow):
         if config and self.segmentation_window:
             self.segmentation_window.restaurer_config(config)
 
-        if self.chemin_dossier:
-            nom_base = os.path.splitext(os.path.basename(chemin))[0]
-            # nom_ovp = avec suffixe _OVP, nom_json = sans
-            while nom_base.endswith("_OVP"):
-                nom_base = nom_base[:-4]
-            nom_json = nom_base          # ex: "1"
-            nom_ovp  = f"{nom_base}_OVP" # ex: "1_OVP"
+        # Mise à jour des mesures affichées pour l'image courante.
+        # Fonctionne AVEC ou SANS dossier de travail : les chemins basés sur le
+        # dossier de travail ne sont ajoutés que s'il est chargé.
+        nom_base = os.path.splitext(os.path.basename(chemin))[0]
+        # nom_ovp = avec suffixe _OVP, nom_json = sans
+        while nom_base.endswith("_OVP"):
+            nom_base = nom_base[:-4]
+        nom_json = nom_base          # ex: "1"
+        nom_ovp  = f"{nom_base}_OVP" # ex: "1_OVP"
 
-            # Dossier du dossier d'images courant (remonte depuis fundus_images/)
-            dossier_image = os.path.dirname(chemin)
-            if os.path.basename(dossier_image) == "fundus_images":
-                dossier_image = os.path.dirname(dossier_image)
-            parent_image = os.path.dirname(dossier_image)
+        # Dossier du dossier d'images courant (remonte depuis fundus_images/)
+        dossier_image = os.path.dirname(chemin)
+        if os.path.basename(dossier_image) == "fundus_images":
+            dossier_image = os.path.dirname(dossier_image)
+        parent_image = os.path.dirname(dossier_image)
 
-            def _json_prov(nom):
-                return os.path.join(self.chemin_dossier, "mesures_json", f"{nom}_data.json")
-            def _json_res(nom):
-                return os.path.join(self.chemin_dossier, "results", "mesures_json", f"{nom}_data.json")
-            def _json_arch(nom):
-                return os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json")
-            def _json_glob(nom):
-                pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
-                r = glob.glob(pattern)
-                return r[0] if r else ""
-            def _json_image_results(nom):
-                return os.path.join(dossier_image, "results", "mesures_json", f"{nom}_data.json")
-            def _json_parent_glob(nom):
-                pattern = os.path.join(parent_image, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
-                r = glob.glob(pattern)
-                return r[0] if r else ""
+        def _json_image_results(nom):
+            return os.path.join(dossier_image, "results", "mesures_json", f"{nom}_data.json")
+        def _json_parent_glob(nom):
+            pattern = os.path.join(parent_image, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
+            r = glob.glob(pattern)
+            return r[0] if r else ""
 
-            # Cherche dans l'ordre : archive > results image > provisoire/results, avec _OVP en priorité puis sans
-            chemin_json = None
-            for nom in (nom_ovp, nom_json):
-                for candidat in (_json_arch(nom), _json_glob(nom), _json_image_results(nom), _json_parent_glob(nom), _json_prov(nom), _json_res(nom)):
-                    if candidat and os.path.exists(candidat):
-                        chemin_json = candidat
-                        break
-                if chemin_json:
+        # Cherche dans l'ordre : results canonique > archive > results image >
+        # provisoire/results, avec _OVP en priorité puis sans.
+        racine_result = self._racine_result(chemin)
+        chemin_json = None
+        for nom in (nom_ovp, nom_json):
+            candidats = []
+            if racine_result:  # dossier 'results' canonique (mesures fraîchement calculées)
+                candidats.append(os.path.join(racine_result, "results", "mesures_json", f"{nom}_data.json"))
+            if self.chemin_dossier:  # archives du dossier de travail (prioritaires)
+                candidats.append(os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json"))
+                g = glob.glob(os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json"))
+                candidats.append(g[0] if g else "")
+            # Toujours : results du dossier d'image, puis archive globale parente
+            candidats.append(_json_image_results(nom))
+            candidats.append(_json_parent_glob(nom))
+            if self.chemin_dossier:  # provisoire + results du dossier de travail
+                candidats.append(os.path.join(self.chemin_dossier, "mesures_json", f"{nom}_data.json"))
+                candidats.append(os.path.join(self.chemin_dossier, "results", "mesures_json", f"{nom}_data.json"))
+            for candidat in candidats:
+                if candidat and os.path.exists(candidat):
+                    chemin_json = candidat
                     break
+            if chemin_json:
+                break
 
-            self._init_toolbox()
-            self.toolbox.chemin_json_courant = chemin_json
+        # La toolbox des mesures ne s'affiche/s'active que si une mesure existe
+        # pour cette image dans le dossier 'results'.
+        self._maj_toolbox_mesures(chemin_json)
 
     # ------------------------------------------------------------------
     # Chargement / affichage
@@ -1315,13 +1405,37 @@ class MainWindow(QMainWindow):
         return None
     
 
+    def _racine_result(self, chemin_image=None):
+        """Dossier de base dont le sous-dossier 'results/mesures_json' sert
+        d'archive canonique des mesures calculées.
+
+        Les mesures lancées y sont toujours enregistrées, et c'est le premier
+        emplacement consulté lorsqu'on change d'image — ce qui garantit qu'une
+        mesure calculée est rechargée automatiquement. On privilégie le dossier
+        de travail (stable d'une session à l'autre) ; à défaut, le dossier de
+        l'image courante. Retourne None si aucune base n'est connue.
+        """
+        if self.chemin_dossier:
+            return self.chemin_dossier
+        chemin = chemin_image or self.chemin_image
+        if not chemin:
+            return None
+        dossier_image = os.path.dirname(chemin)
+        if os.path.basename(dossier_image) == "fundus_images":
+            dossier_image = os.path.dirname(dossier_image)
+        return dossier_image
+
     def mesure(self):
 
-        if self.chemin_dossier is None:
-            StyledMessageBox.information(self, "Aucun dossier sélectionné", self.T["dlg_save_aucun_dossier"])
+        # Le dossier de travail est facultatif : si aucun n'est chargé, les
+        # mesures sont calculées et enregistrées dans le dossier d'image.
+        # Seule une image ouverte est indispensable.
+        if self.chemin_image is None:
+            StyledMessageBox.information(self, "Aucune image sélectionnée",
+                                        "Veuillez d'abord ouvrir une image avant de lancer les mesures.")
             return
 
-        self._init_toolbox()
+        self._init_toolbox(afficher=False)
         nom_image = os.path.basename(self.chemin_image)
         nom_base  = os.path.splitext(nom_image)[0]
         # Normaliser : retirer tous les _OVP pour avoir la racine
@@ -1335,26 +1449,15 @@ class MainWindow(QMainWindow):
         if os.path.basename(dossier_image) == "fundus_images":
             dossier_image = os.path.dirname(dossier_image)
 
-        def _results_vide(dossier):
-            """Retourne True si results/ existe dans ce dossier et est vide."""
-            try:
-                d = os.path.join(dossier, "results")
-                return os.path.isdir(d) and not os.listdir(d)
-            except OSError:
-                return False
-
-        # Priorité : results/ vide du dossier d'images, puis du dossier de travail
-        if _results_vide(dossier_image):
-            dossier_results_direct = os.path.join(dossier_image, "results")
-            racine_calcul = dossier_results_direct
-        elif _results_vide(self.chemin_dossier):
-            dossier_results_direct = os.path.join(self.chemin_dossier, "results")
-            racine_calcul = dossier_results_direct
-        else:
-            dossier_results_direct = os.path.join(self.chemin_dossier, "results")
-            racine_calcul = self.chemin_dossier
-
-        output_csv_root = os.path.join(racine_calcul, "mesures.csv")
+        # Emplacement canonique et déterministe : <base>/results, où <base> est
+        # le dossier de travail s'il est chargé, sinon le dossier de l'image.
+        # Les mesures lancées y sont toujours écrites (sous-dossier mesures_json),
+        # et c'est ce même dossier que _charger_image consulte en priorité au
+        # changement d'image : la mesure calculée est ainsi rechargée d'office.
+        base = self._racine_result(self.chemin_image)
+        racine_calcul          = os.path.join(base, "results")
+        dossier_results_direct = racine_calcul
+        output_csv_root        = os.path.join(racine_calcul, "mesures.csv")
 
         def _chercher_json(nom):
             """Retourne le premier JSON trouvé pour ce nom (avec ou sans _OVP)."""
@@ -1367,11 +1470,14 @@ class MainWindow(QMainWindow):
                 os.path.join(racine_calcul, "mesures_json", f"{nom}_data.json"),
                 os.path.join(dossier_results_direct, "mesures_json", f"{nom}_data.json"),
                 os.path.join(dossier_image, "results", "mesures_json", f"{nom}_data.json"),
-                os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json"),
             ]
-            # archive globale dans chemin_dossier
-            pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
-            candidats += glob.glob(pattern)
+            # Chemins basés sur le dossier de travail (uniquement s'il est chargé)
+            if self.chemin_dossier:
+                candidats.append(
+                    os.path.join(self.chemin_dossier, f"{nom}_OVP", "results", "mesures_json", f"{nom}_data.json"))
+                # archive globale dans chemin_dossier
+                pattern = os.path.join(self.chemin_dossier, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
+                candidats += glob.glob(pattern)
             # archive globale dans le dossier parent du dossier d'images
             parent_image = os.path.dirname(dossier_image)
             pattern2 = os.path.join(parent_image, "*_fundus_images_code_OVP", "results", "mesures_json", f"{nom}_data.json")
@@ -1384,7 +1490,7 @@ class MainWindow(QMainWindow):
         # --- TESTS D'EXISTENCE : chercher avec _OVP d'abord, puis sans ---
         chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
         if chemin_json:
-            self.toolbox.chemin_json_courant = chemin_json
+            self._maj_toolbox_mesures(chemin_json)
             self.statusBar().showMessage(self.T["status_mesures_chargees"])
             return
 
@@ -1398,10 +1504,17 @@ class MainWindow(QMainWindow):
                 rc.csv_to_jsons(csv_path, racine_conv)
                 chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
                 if chemin_json:
-                    self.toolbox.chemin_json_courant = chemin_json
+                    self._maj_toolbox_mesures(chemin_json)
                     return
 
         # --- RIEN N'EXISTE : LANCEMENT DU CALCUL ---
+        # Un seul calcul à la fois (évite les conflits sur le dossier de sortie).
+        worker_actuel = getattr(self, "_mesure_worker", None)
+        if worker_actuel is not None and worker_actuel.isRunning():
+            StyledMessageBox.information(self, "Calcul en cours",
+                                        "Un calcul de mesures est déjà en cours. Veuillez patienter.")
+            return
+
         self.statusBar().showMessage(self.T["status_calcul"])
 
         vein_dir = self.chemin_abs("veins")
@@ -1412,17 +1525,32 @@ class MainWindow(QMainWindow):
 
         args = ["measurements.py", art_dir, vein_dir, od_dir, output_csv_root]
 
-        try:
-            m_script.main(args)
-            rc.csv_to_jsons(output_csv_root, racine_calcul)
-            chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
-            self.toolbox.chemin_json_courant = chemin_json
-            StyledMessageBox.information(self, "Mesures lancées avec succès", "Les mesures ont été lancées.")
-            self.statusBar().showMessage(self.T["status_mesures_terminees"].format(nom=nom_image))
+        # Pop-up de chargement NON-modal (style StyledMessageBox) : l'application
+        # reste utilisable pendant le calcul, qui tourne dans un thread.
+        popup = _LoadingPopup(self, self.T["status_calcul"])
+        popup.show()
 
-        except Exception as e:
-            print(f"Erreur lors de l'exécution : {e}")
+        def _terminer():
+            popup.close()
+            chemin_json = _chercher_json(nom_ovp) or _chercher_json(nom_json)
+            self._maj_toolbox_mesures(chemin_json)
+            StyledMessageBox.information(self, "Mesures terminées",
+                                        "Les mesures ont été calculées.")
+            self.statusBar().showMessage(
+                self.T["status_mesures_terminees"].format(nom=nom_image))
+
+        def _echouer(message):
+            popup.close()
             self.statusBar().showMessage(self.T["status_erreur_calcul"])
+            StyledMessageBox.critical(self, "Erreur de calcul",
+                                      f"Le calcul des mesures a échoué :\n{message}")
+
+        # Lancement du calcul dans un thread (réf. gardée sur self pour éviter
+        # une destruction prématurée du QThread).
+        self._mesure_worker = _MesureWorker(args, output_csv_root, racine_calcul)
+        self._mesure_worker.termine.connect(_terminer)
+        self._mesure_worker.erreur.connect(_echouer)
+        self._mesure_worker.start()
             
     def chemin_abs(self, type_seg):
         abs_chemin = self.chemin_image
@@ -1507,14 +1635,24 @@ class MainWindow(QMainWindow):
             
 
     #-----------------ACTION 7: OUVRIR MESURES----------------
-    def _init_toolbox(self):
+    def _init_toolbox(self, afficher=True):
         if self.toolbox is None:
             self.toolbox = mb.MesuresToolbox(self)
             self.addDockWidget(Qt.RightDockWidgetArea, self.toolbox)
             self.actAfficherToolbox.triggered.connect(self.toolbox.setVisible)
             self.toolbox.visibilityChanged.connect(self.actAfficherToolbox.setChecked)
             self.toolbox.appliquer_langue(self.T)
-        self.toolbox.show()
+        self.toolbox.setVisible(afficher)
+
+    def _maj_toolbox_mesures(self, chemin_json):
+        """Affiche et active la toolbox des mesures uniquement si un fichier de
+        mesures est réellement disponible (présent dans le dossier 'results').
+        Sinon, la toolbox reste masquée et désactivée."""
+        dispo = bool(chemin_json and os.path.exists(chemin_json))
+        self._init_toolbox(afficher=dispo)
+        self.toolbox.chemin_json_courant = chemin_json if dispo else None
+        self.toolbox.set_enabled(dispo)
+        return dispo
 
 
     def generer_rendu_fusionne(self):
@@ -1692,8 +1830,15 @@ class MainWindow(QMainWindow):
 
     def _archiver_mesures(self, dossier_result):
         """Copie mesures.csv et mesures_json/ vers dossier_result (sans écraser les fichiers existants)."""
-        csv_src      = os.path.join(self.chemin_dossier, "mesures.csv")
-        json_dir_src = os.path.join(self.chemin_dossier, "mesures_json")
+        # Emplacement canonique des mesures calculées : <dossier_travail>/results.
+        racine = os.path.join(self.chemin_dossier, "results")
+        csv_src      = os.path.join(racine, "mesures.csv")
+        json_dir_src = os.path.join(racine, "mesures_json")
+        # Repli sur l'ancien emplacement (racine du dossier de travail).
+        if not os.path.exists(csv_src):
+            csv_src = os.path.join(self.chemin_dossier, "mesures.csv")
+        if not os.path.exists(json_dir_src):
+            json_dir_src = os.path.join(self.chemin_dossier, "mesures_json")
 
         if os.path.exists(csv_src):
             shutil.copy(csv_src, os.path.join(dossier_result, "mesures_globales.csv"))

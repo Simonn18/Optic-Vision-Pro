@@ -251,8 +251,8 @@ TEXTES = {
         "en": "Edit the disc",
     },
     "seg_btn_valider": {
-        "fr": "Valider le disque",
-        "en": "Validate the disc",
+        "fr": "Valider les disques",
+        "en": "Validate the disks",
     },
     "seg_btn_lancer": {
         "fr": "Lancer les mesures",
