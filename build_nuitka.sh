@@ -19,8 +19,8 @@ python -m nuitka \
     --include-data-files=OPV3.png=OPV3.png \
     --include-package=skimage \
     --include-package-data=skimage \
-    --include-package=scipy \
-    --include-package-data=scipy \
+    --include-module=scipy.spatial.distance \
+    --include-module=scipy.signal \
     --include-package=cv2 \
     --include-package-data=cv2 \
     --output-dir=build \
