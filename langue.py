@@ -455,6 +455,10 @@ TEXTES = {
         "fr": "Couleur du disque optique",
         "en": "Optic disc colour",
     },
+    "seg_btn_couleur_superposition": {
+        "fr": "Couleur des superpositions",
+        "en": "Overlap colour",
+    },
     "seg_opacite_image": {
         "fr": "Opacité image",
         "en": "Image opacity",
@@ -506,6 +510,10 @@ TEXTES = {
     "seg_couleur_disque_titre": {
         "fr": "Choisir la couleur du disque optique",
         "en": "Choose optic disc colour",
+    },
+    "seg_couleur_superposition_titre": {
+        "fr": "Choisir la couleur des superpositions artères/veines",
+        "en": "Choose artery/vein overlap colour",
     },
 
     # ──────────────────────────────────────────────

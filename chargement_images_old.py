@@ -61,12 +61,6 @@ def load_images(list_paths,
                 couleur_arteres=(255, 0, 100, 255),
                 couleur_disque=(0, 255, 0, 255),
                 couleur_superposition=(255, 0, 255, 255)):
-    """Charge l'image et ses 3 masques colorisés.
-
-    Version VECTORISÉE (indexation booléenne numpy) : produit exactement le
-    même résultat que les anciennes doubles boucles pixel par pixel
-    (cf. chargement_images_old.py), mais en une fraction du temps.
-    """
 
     image_originale = ski.io.imread(list_paths[0])
     image_originale = np.transpose(image_originale, (2, 0, 1))
@@ -76,30 +70,37 @@ def load_images(list_paths,
         mask_veins_raw = mask_veins_raw.max(axis=2)
     h, w = mask_veins_raw.shape
 
+    # Veines — couleur paramétrable
+    mask_temp = np.zeros((h, w, 4), dtype=np.uint8)
+    for y in range(h):
+        for x in range(w):
+            if mask_veins_raw[y, x] > 0:
+                mask_temp[y, x] = couleur_veines   
+    mask_veins = mask_temp
+
+    # Artères — couleur paramétrable
     mask_arteries_raw = ski.io.imread(list_paths[2])
     if mask_arteries_raw.ndim == 3:
         mask_arteries_raw = mask_arteries_raw.max(axis=2)
+    mask_temp = np.zeros((h, w, 4), dtype=np.uint8)
+    for y in range(h):
+        for x in range(w):
+            if mask_arteries_raw[y, x] > 0:
+                if mask_veins_raw[y, x] > 0:
+                    mask_temp[y, x] = couleur_superposition  # overlap artères/veines
+                else:
+                    mask_temp[y, x] = couleur_arteres      
+    mask_arteries = mask_temp
 
+    # Disque optique — couleur paramétrable
     mask_od_raw = ski.io.imread(list_paths[3])
     if mask_od_raw.ndim == 3:
         mask_od_raw = mask_od_raw.max(axis=2)
-
-    # Masques booléens des pixels actifs
-    veines  = mask_veins_raw > 0
-    arteres = mask_arteries_raw > 0
-    disque  = mask_od_raw > 0
-
-    # Veines — couleur paramétrable
-    mask_veins = np.zeros((h, w, 4), dtype=np.uint8)
-    mask_veins[veines] = couleur_veines
-
-    # Artères — couleur paramétrable, avec couleur dédiée pour l'overlap A/V
-    mask_arteries = np.zeros((h, w, 4), dtype=np.uint8)
-    mask_arteries[arteres & ~veines] = couleur_arteres
-    mask_arteries[arteres &  veines] = couleur_superposition
-
-    # Disque optique — couleur paramétrable
-    mask_od = np.zeros((h, w, 4), dtype=np.uint8)
-    mask_od[disque] = couleur_disque
+    mask_temp = np.zeros((h, w, 4), dtype=np.uint8)
+    for y in range(h):
+        for x in range(w):
+            if mask_od_raw[y, x] > 0:
+                mask_temp[y, x] = couleur_disque           
+    mask_od = mask_temp
 
     return image_originale, mask_veins, mask_arteries, mask_od

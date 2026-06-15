@@ -536,13 +536,14 @@ class MainWindow(QMainWindow):
         self.T = changement_langue(self.langue_courante)  # dictionnaire actif
         # Couleurs par défaut des masques
         self.couleurs_defaut = {
-            "veines":  (0,   0,   255, 255),
-            "arteres": (255, 0,   100, 255),
-            "disque":  (0,   255, 0,   255),
+            "veines":        (0,   0,   255, 255),
+            "arteres":       (255, 0,   100, 255),
+            "disque":        (0,   255, 0,   255),
+            "superposition": (255, 0,   255, 255),
         }
         self.couleurs = dict(self.couleurs_defaut)
 
-        # Config par défaut : seul le disque est visible, opacité 100
+        # Config par défaut : opacité 50
         self.config_defaut = {
             "couleurs": dict(self.couleurs_defaut),
             "opacites": {
@@ -557,9 +558,10 @@ class MainWindow(QMainWindow):
                 "disque":  True,
             },
             "current_colors": {
-                "veines":  "#2a6496",
-                "arteres": "#e74c3c",
-                "disque":  "#27ae60",
+                "veines":        "#2a6496",
+                "arteres":       "#e74c3c",
+                "disque":        "#27ae60",
+                "superposition": "#ff00ff",
             },
         }
 
@@ -1068,6 +1070,7 @@ class MainWindow(QMainWindow):
             couleur_veines=self.couleurs["veines"],
             couleur_arteres=self.couleurs["arteres"],
             couleur_disque=self.couleurs["disque"],
+            couleur_superposition=self.couleurs.get("superposition", self.couleurs_defaut["superposition"]),
         )
         pixmap_fundus, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
             image_originale, mask_veins, mask_arteries, mask_od
@@ -1212,12 +1215,12 @@ class MainWindow(QMainWindow):
             couleur_veines=self.couleurs["veines"],
             couleur_arteres=self.couleurs["arteres"],
             couleur_disque=self.couleurs["disque"],
+            couleur_superposition=self.couleurs.get("superposition", self.couleurs_defaut["superposition"]),
         )
         _, pixmap_veins, pixmap_arteries, pixmap_od = conversion_qpixmap(
             image_originale, mask_veins, mask_arteries, mask_od
         )
 
-        # Met à jour les pixmaps en place — pas de scene.clear(), l'opacité est préservée
         if self.item_veins:
             self.item_veins.setPixmap(pixmap_veins)
         if self.item_arteries:
@@ -1286,7 +1289,6 @@ class MainWindow(QMainWindow):
 
         DiscToAdd.save(self.list_paths[3])
         self._recharger_masques()
-
 
 
     def edit_disque_optique(self, state=None):
@@ -1372,6 +1374,7 @@ class MainWindow(QMainWindow):
                 StyledMessageBox.information(self, "Annulé", "Le déplacement du disque optique a été annulé.")
                 self.item_od.setPos(0, 0)
 
+    
 
     #=================Lancer mesure=======================
 
@@ -1695,6 +1698,7 @@ class MainWindow(QMainWindow):
                 couleur_veines=couleurs["veines"],
                 couleur_arteres=couleurs["arteres"],
                 couleur_disque=couleurs["disque"],
+                couleur_superposition=couleurs.get("superposition", self.couleurs_defaut["superposition"]),
             )
             pix_f, pix_v, pix_a, pix_o = conversion_qpixmap(image_orig, mask_veins, mask_arteries, mask_od)
         except Exception as e:

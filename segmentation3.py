@@ -6,16 +6,18 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 
-BLUE   = "#2a6496"
-RED    = "#e74c3c"
-GREEN  = "#27ae60"
-ORANGE = "#e67e22"
+BLUE    = "#2a6496"
+RED     = "#e74c3c"
+GREEN   = "#27ae60"
+ORANGE  = "#e67e22"
+MAGENTA = "#ff00ff"
 
 # Config des dialogues couleur : clé → (titre, couleur par défaut Qt)
 COLOR_CONFIG = {
-    "veines":  ("Choisir la couleur des veines",         Qt.blue),
-    "arteres": ("Choisir la couleur des artères",        Qt.red),
-    "disque":  ("Choisir la couleur du disque optique",  Qt.green),
+    "veines":        ("Choisir la couleur des veines",                       Qt.blue),
+    "arteres":       ("Choisir la couleur des artères",                      Qt.red),
+    "disque":        ("Choisir la couleur du disque optique",               Qt.green),
+    "superposition": ("Choisir la couleur des superpositions artères/veines", Qt.magenta),
 }
 
 MSG_STYLE = """
@@ -194,9 +196,10 @@ class SegmentationToolbox(QDockWidget):
         self.setStyleSheet(self.TOOLBOX_STYLE)
 
         self.current_colors = {
-            "veines":  BLUE,
-            "arteres": RED,
-            "disque":  GREEN
+            "veines":        BLUE,
+            "arteres":       RED,
+            "disque":        GREEN,
+            "superposition": MAGENTA,
         }
         self.sliders = {}
         self.groups  = {}
@@ -246,10 +249,17 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines  = QPushButton("Couleur des veines")
         self.btn_couleur_arteres = QPushButton("Couleur des artères")
         self.btn_couleur_disque  = QPushButton("Couleur du disque optique")
+        self.btn_couleur_superposition = QPushButton("Couleur des superpositions")
+        self.btn_reinitialiser_couleurs = QPushButton("Réinitialiser les paramètres")
+        self.btn_reinitialiser_couleurs.clicked.connect(self.reinitialiser_parametres)
+
 
         self.btn_couleur_veines.setObjectName("btn_couleur_veines")
         self.btn_couleur_arteres.setObjectName("btn_couleur_arteres")
         self.btn_couleur_disque.setObjectName("btn_couleur_disque")
+        self.btn_couleur_superposition.setObjectName("btn_couleur_superposition")
+        self.btn_reinitialiser_couleurs.setObjectName("btn_reinitialiser_couleurs")
+        
         
         self.maj_rendu_sauvegarde = QPushButton("Sauvegarder les rendus")
         self.maj_rendu_sauvegarde.setObjectName("maj_rendu")
@@ -280,6 +290,8 @@ class SegmentationToolbox(QDockWidget):
             self.btn_couleur_veines,
             self.btn_couleur_arteres,
             self.btn_couleur_disque,
+            self.btn_couleur_superposition,
+            self.btn_reinitialiser_couleurs
         ])
         self.main_layout.addWidget(self.group_couleurs)
 
@@ -317,6 +329,7 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.clicked.connect(lambda: self.modifier_couleurs("veines"))
         self.btn_couleur_arteres.clicked.connect(lambda: self.modifier_couleurs("arteres"))
         self.btn_couleur_disque.clicked.connect(lambda: self.modifier_couleurs("disque"))
+        self.btn_couleur_superposition.clicked.connect(lambda: self.modifier_couleurs("superposition"))
 
     # ------------------------------------------------------------------ #
     #  Helpers UI                                                           #
@@ -393,6 +406,8 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.setEnabled(veines)
         self.btn_couleur_arteres.setEnabled(arteres)
         self.btn_couleur_disque.setEnabled(disque)
+        # La superposition n'apparaît que là où veines ET artères se recouvrent.
+        self.btn_couleur_superposition.setEnabled(veines and arteres)
         self.btn_creer_disque.setEnabled(disque)
         self.btn_editer.setEnabled(disque)
         self.btn_valider.setEnabled(disque)
@@ -448,6 +463,42 @@ class SegmentationToolbox(QDockWidget):
         if parent and hasattr(parent, "modif_couleurs"):
             parent.modif_couleurs(key, color_modif)
             
+            
+    def reinitialiser_parametres(self):
+        """Réinitialise les couleurs aux valeurs par défaut et l'opacité."""
+        parent = self.parent()
+
+        for key, (titre, default_qt_color) in COLOR_CONFIG.items():
+            couleur_hex = QColor(default_qt_color).name(QColor.NameFormat.HexRgb)
+            self.current_colors[key] = couleur_hex
+
+            # Mise à jour visuelle du bouton dans la toolbox
+            bouton = getattr(self, f"btn_couleur_{key}")
+            bouton.setStyleSheet(f"color: {couleur_hex}; font-weight: bold;")
+
+            slider = self.sliders.get(key)
+            if slider:
+                self._style_slider(slider, couleur_hex)
+
+            # Notification du parent pour CETTE couleur
+            if parent and hasattr(parent, "modif_couleurs"):
+                parent.modif_couleurs(key, self.hex_to_rgb(couleur_hex))
+
+        for key in ["image", "veines", "arteres", "disque"]:
+            slider = self.sliders.get(key)
+            if slider:
+                slider.blockSignals(True)
+                slider.setValue(50)
+                slider.blockSignals(False)
+
+            if hasattr(self, "val_labels") and key in self.val_labels:
+                self.val_labels[key].setText("50")
+
+        # Propage l'opacité réinitialisée (50) au rendu : les sliders ayant été
+        # modifiés avec les signaux bloqués, appliquer() n'a pas été déclenché.
+        self.appliquer()
+
+
     def _sauvegarder_rendus(self):
         parent = self.parent()
         if parent and hasattr(parent, "sauvegarder_rendus"):
@@ -515,9 +566,10 @@ class SegmentationToolbox(QDockWidget):
         """Retourne les couleurs et opacités actuelles (pour sauvegarde par image)."""
         return {
             "couleurs": {
-                "veines":  self._hex_to_rgba(self.current_colors.get("veines",  "#2a6496")),
-                "arteres": self._hex_to_rgba(self.current_colors.get("arteres", "#e74c3c")),
-                "disque":  self._hex_to_rgba(self.current_colors.get("disque",  "#27ae60")),
+                "veines":        self._hex_to_rgba(self.current_colors.get("veines",        "#2a6496")),
+                "arteres":       self._hex_to_rgba(self.current_colors.get("arteres",       "#e74c3c")),
+                "disque":        self._hex_to_rgba(self.current_colors.get("disque",        "#27ae60")),
+                "superposition": self._hex_to_rgba(self.current_colors.get("superposition", "#ff00ff")),
             },
             "opacites": {
                 "image":   self.sliders["image"].value(),
@@ -551,8 +603,14 @@ class SegmentationToolbox(QDockWidget):
                 cb.setChecked(config["visibilites"][key])
                 cb.blockSignals(False)
 
-        # Couleurs boutons et sliders
-        for key, hex_color in config.get("current_colors", {}).items():
+        # Couleurs boutons et sliders.
+        # On repart TOUJOURS des couleurs par défaut, puis on applique celles
+        # sauvegardées pour CETTE image : ainsi la couleur d'une image précédente
+        # (notamment la superposition) ne « fuite » jamais sur l'image courante,
+        # même si la config sauvegardée est incomplète.
+        couleurs = dict(self._couleurs_defaut())
+        couleurs.update(config.get("current_colors", {}))
+        for key, hex_color in couleurs.items():
             self.current_colors[key] = hex_color
             bouton = getattr(self, f"btn_couleur_{key}", None)
             if bouton:
@@ -562,6 +620,16 @@ class SegmentationToolbox(QDockWidget):
                 self._style_slider(slider, hex_color)
 
         self.update_ui()
+
+    @staticmethod
+    def _couleurs_defaut() -> dict:
+        """Couleurs par défaut (hex) de chaque couche, superposition incluse."""
+        return {
+            "veines":        BLUE,
+            "arteres":       RED,
+            "disque":        GREEN,
+            "superposition": MAGENTA,
+        }
     
     def appliquer_langue(self, T: dict):
         """Met à jour tous les textes de la toolbox segmentation."""
@@ -582,6 +650,7 @@ class SegmentationToolbox(QDockWidget):
         self.btn_couleur_veines.setText(T["seg_btn_couleur_veines"])
         self.btn_couleur_arteres.setText(T["seg_btn_couleur_arteres"])
         self.btn_couleur_disque.setText(T["seg_btn_couleur_disque"])
+        self.btn_couleur_superposition.setText(T["seg_btn_couleur_superposition"])
         
         #Boutons maj rendu
         self.maj_rendu_sauvegarde.setText(T["btn_maj_rendu"])
@@ -598,9 +667,10 @@ class SegmentationToolbox(QDockWidget):
  
         # Mettre à jour COLOR_CONFIG pour les futurs dialogues couleur
         self._color_config_local = {
-            "veines":  (T["seg_couleur_veines_titre"],  Qt.blue),
-            "arteres": (T["seg_couleur_arteres_titre"], Qt.red),
-            "disque":  (T["seg_couleur_disque_titre"],  Qt.green),
+            "veines":        (T["seg_couleur_veines_titre"],        Qt.blue),
+            "arteres":       (T["seg_couleur_arteres_titre"],       Qt.red),
+            "disque":        (T["seg_couleur_disque_titre"],        Qt.green),
+            "superposition": (T["seg_couleur_superposition_titre"], Qt.magenta),
         }
 
 
