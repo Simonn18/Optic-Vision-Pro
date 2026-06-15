@@ -864,7 +864,6 @@ class MainWindow(QMainWindow):
         self.lbl_placeholder.show()
         self.dossier_travail.setEnabled(True)
         self.btn_dossier.setEnabled(True)
-        self.statusBar().showMessage(self.T["status_etape1"])
         self.topbar.show()
         
     def charger_dossier_travail(self):

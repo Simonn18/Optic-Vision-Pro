@@ -544,24 +544,24 @@ TEXTES = {
         "en": "Zones",
     },
     "mes_cb_zoneAll": {
-        "fr": "Tout",
+        "fr": "All",
         "en": "All",
     },
     "mes_cb_zoneOut": {
-        "fr": "Rien",
-        "en": "None",
+        "fr": "Out",
+        "en": "Out",
     },
     "mes_btn_tout": {
-        "fr": "Tout",
+        "fr": "All",
         "en": "All",
     },
     "mes_btn_rien": {
-        "fr": "Rien",
-        "en": "None",
+        "fr": "Out",
+        "en": "Out",
     },
     "mes_groupe_actions": {
-        "fr": "Groupes d'actions",
-        "en": "Action groups",
+        "fr": "Groupes de mesures",
+        "en": "Measure groups",
     },
     "mes_cb_quality": {
         "fr": "Contrôle qualité",
