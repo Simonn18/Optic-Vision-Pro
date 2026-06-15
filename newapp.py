@@ -878,6 +878,51 @@ class MainWindow(QMainWindow):
         else:
             StyledMessageBox.warning(self, self.T["dlg_dossier_erreur_titre"], self.T["dlg_dossier_erreur_texte"])
 
+    def reset(self):
+        """Réinitialise l'état du dossier de travail avant d'en charger un autre.
+
+        Vide la scène, le bandeau d'images, les réglages et mesures mémorisés par
+        image, remet les couleurs par défaut et masque les toolboxes — afin
+        qu'aucune donnée de l'ancien dossier ne subsiste.
+        """
+        # Scène et calques de l'image courante
+        self.scene.clear()
+        self.item_fundus = None
+        self.item_veins = None
+        self.item_arteries = None
+        self.item_od = None
+
+        # Bandeau d'images : retirer les miniatures de l'ancien dossier
+        if getattr(self, "image_strip", None):
+            self.image_strip.strip_fundus.charger_images([])
+            self.image_strip.hide()
+
+        # Caches par image (réglages + mesures) liés à l'ancien dossier
+        self.config_par_image.clear()
+        self.mesures_par_image.clear()
+
+        # Couleurs : retour aux valeurs par défaut
+        self.couleurs = dict(self.couleurs_defaut)
+
+        # Toolboxes
+        if self.segmentation_window:
+            self.segmentation_window.hide()
+        if self.toolbox:
+            self.toolbox.chemin_json_courant = None
+            self.toolbox.hide()
+
+        # Chemins / index de l'image courante
+        self.chemin_courant = None
+        self.chemin_image = None
+        self.path_image_courante = None
+        self.list_paths = None
+        self.index_courant = 0
+
+        # Retour à l'état "prêt à charger" sans quitter l'interface de travail
+        self.vue.hide()
+        self.actionbar.hide()
+        self.lbl_placeholder.show()
+
     @staticmethod
     def _styled_msgbox(parent, titre: str, texte: str, info: str = "") -> StyledMessageBox:
         """Crée une QMessageBox stylisée réutilisable."""
