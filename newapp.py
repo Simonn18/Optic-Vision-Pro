@@ -868,7 +868,7 @@ class MainWindow(QMainWindow):
         
     def charger_dossier_travail(self):
         if self.chemin_dossier is not None:
-            self.reset("de dossier")
+            self.reset()
             self.chemin_dossier = None
 
         chemin_dossier = QFileDialog.getExistingDirectory(self, self.T["btn_dossier_travail"], os.getcwd())
