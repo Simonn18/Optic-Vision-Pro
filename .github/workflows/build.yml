@@ -7,24 +7,45 @@ on:
     branches: [ main ]
     tags: [ "v*" ]
   workflow_dispatch:
+    inputs:
+      os_target:
+        description: "Quel OS construire ?"
+        type: choice
+        default: all
+        options:
+          - all
+          - linux
+          - windows
+          - macos
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    # Sur déclenchement manuel, ne lancer que l'OS choisi (sinon tous).
+    # Les push/tags construisent toujours les 3.
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.os_target == 'all' ||
+      github.event.inputs.os_target == matrix.target
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
+            target: linux
             extra: "--onefile --output-filename=OpticVisionPro"
             artifact: OpticVisionPro-Linux
             path: build/OpticVisionPro*
           - os: windows-latest
-            extra: "--onefile --output-filename=OpticVisionPro.exe"
+            target: windows
+            # --mingw64 : utilise GCC au lieu de MSVC, qui sature (C1002) sur les
+            # énormes fichiers C générés par scipy.integrate (_lebedev/_tanhsinh).
+            extra: "--mingw64 --onefile --output-filename=OpticVisionPro.exe"
             artifact: OpticVisionPro-Windows
             path: build/OpticVisionPro.exe
           - os: macos-latest
+            target: macos
             extra: "--macos-create-app-bundle --macos-app-name=OpticVisionPro"
             artifact: OpticVisionPro-macOS
             path: build/*.app
