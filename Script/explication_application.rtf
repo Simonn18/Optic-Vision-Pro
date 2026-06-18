@@ -1,0 +1,45 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2868
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww19000\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 Etape pour utilisation de l\'92application.\
+\
+1\'b0) Charger un dossier d\'92image.\
+2\'b0) V\'e9rifier sur les miniatures que le disque optique est bien plac\'e9 (seul les images avec le disque correctement positionn\'e9es auront des mesures)\
+2.1) Appuyer sur valider les disques puis lancer les mesures (Se font en arri\'e8re-plan, \'e0 lancer au d\'e9but car peut \'eatre tr\'e8s long)\
+2.2) Bouton veines art\'e8res et disque optique peuvent \'eatre cocher ou d\'e9cocher en fonction des besoins de l\'92utilisateur. Les boutons sont coch\'e9s de base mais les segmentations peuvent \'eatre enlev\'e9s.\
+2.3) Modification des couleurs de chaque segmentation ainsi que la superposition art\'e8res/veines en fonction de la visibilit\'e9 ou non de chaque segmentation.\
+2.4) Modification de chaque opacit\'e9 individuellement et possibilit\'e9 de r\'e9initialiser tous les param\'e8tres avec le boutons \'ab\'a0r\'e9initialiser les maram\'e8tres\'a0\'bb\
+\
+3\'b0) Mesures\
+3.1) Lorsque les mesures sont faites, le panneau Mesure s\'92affiche \'e0 droite de l\'92image permettant de choisir les diff\'e9rents param\'e8tres\
+3.2\'b0) Mesures sous forme d\'92arborescence, obligation de s\'e9lectionner au moins un param\'e8tres par bloc.\
+3.3\'b0) Affichage des mesures par images, le bouton \'ab\'a0afficher mesures affichent pour les param\'e8tres choisit les mesures correspondantes \'e0 chaque image. Pour moi les mesures d\'92une autre image, cliquer sur une nouvelle image et r\'e9appuyer sur \'ab\'a0afficher image\'a0\'bb.\
+3.4\'b0) Export des mesures sous forme texte pour l\'92ensemble des images ou seulement celle active sur l\'92\'e9cran avec les param\'e8tres choisi.\
+\
+4\'b0) Sauvegarde.\
+4.1\'b0) La sauvegarde se fait dans un dossier pr\'e9alablement choisi avec \'ab\'a0ouvrir un dossier de travail\'a0\'bb. La sauvegarde se fait sous 4 sous dossiers Principaux.\
+4.1.1) fundus_images\
+4.1.1.2) Contient les images d\'92origine avec le json de param\'e9trage de couleurs et d\'92opacit\'e9\
+4.1.2) rendu_finaux\
+4.1.2.1) Contient des images png avec l\'92image d\'92origine et les segmentations param\'e9trer superpos\'e9s dessus.\
+4.1.3) Mesures\
+4.1.3.1) Contient fichier de mesures globales\
+4.1.3.2) Contient un fichier Json par image\
+4.1.4) Segmentation Masks\
+\
+4.2\'b0) Bouton \'ab\'a0sauvegarde permet de sauvegarde sous l\'92architecture expliqu\'e9s l\'92image actuelle en cours de traitement\
+4.3) Bouton \'ab\'a0sauvegarder toutes les images\'a0\'bb permet de sauvegarder l\'92ensmeble des images du dossier.\
+4.3.1) Soit un dossier par image donc si 5 images, 5 dossiers\
+4.3.2) Un dossier pour toutes les images.\
+4.4) Bouton \'ab\'a0S\'e9lection\'a0\'bb permet de s\'e9lection un nombre x d\'92image du dossier d\'92image actuelle pour r\'e9cr\'e9er un dossier \'e0 cot\'e9 contenant les images s\'e9lectionn\'e9es. \
+4.4.1) La s\'e9lection se fait en cliquant directement sur les images pr\'e9sentes dans les miniatures et une encadr\'e9 vert se met autour des images s\'e9lectionn\'e9es.\
+\
+5\'b0) Facilit\'e9 d\'92utilisation.\
+5.1) Les modifications se font directement dans le dossier d\'92images, si l\'92on modifie les param\'e8tres, ils sont mis \'e0 jour \'e0 chaque fois.\
+5.2) SI l\'92on souhaite mettre \'e0 jour les rendus_finaux dans le dossier d\'92images, il suffit de cliquer sur \'ab\'a0Sauvegarder les rendus\'a0\'bb pour mettre \'e0 jour les rendus.\
+5.3) SI les mesures sont pr\'e9sentes dans le dossier d\'92images, le panneau mesures s\'92affiche directement, permettant \'e0 l\'92utilisateur de ne pas devoir relancer les mesures \'e0 chaquoi fois. \
+}

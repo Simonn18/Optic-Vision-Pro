@@ -12,7 +12,7 @@ def get_image_coloree(chemin: str, color: str = None) -> np.ndarray | None:
     img = io.imread(chemin)
     if img.ndim == 2:
         img = np.stack([img, img, img], axis=-1)
-    elif img.ndim == 4:
+    elif img.ndim == 3 and img.shape[2] == 4:
         img = img[:, :, :3]
 
     couleur = None
@@ -52,7 +52,7 @@ def composer_et_afficher(label, chemin_base: str, couches: list):
     base = io.imread(chemin_base)
     if base.ndim == 2:
         base = np.stack([base, base, base], axis=-1)
-    elif base.ndim == 4:
+    elif base.ndim == 3 and base.shape[2] == 4:
         base = base[:, :, :3]
     resultat = base.copy().astype(np.float32)
 

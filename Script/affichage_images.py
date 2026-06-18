@@ -31,20 +31,18 @@ def conversion_qpixmap (image_originale , mask_veins , mask_arteries , mask_od) 
     qimg_originale = QImage (image_originale.data , w , h , 3*w, QImage.Format.Format_RGB888)
     pixmap_fundus = QPixmap.fromImage(qimg_originale)
 
-    #Conversion du mask_veins en QPixmap
-    mask_veins = np.ascontiguousarray(mask_veins)
-    qimg_veins = QImage (mask_veins.data , w , h , 4*w, QImage.Format.Format_RGBA8888)
-    pixmap_veins = QPixmap.fromImage(qimg_veins)
+    # Chaque masque utilise SA propre largeur/hauteur pour le stride QImage
+    # (et non celles du fundus) : sinon un masque de taille différente est
+    # lu avec un mauvais pas mémoire et s'affiche décalé/vide.
+    def _masque_vers_pixmap(masque):
+        masque = np.ascontiguousarray(masque)
+        hm, wm = masque.shape[:2]
+        qimg = QImage(masque.data, wm, hm, 4 * wm, QImage.Format.Format_RGBA8888)
+        return QPixmap.fromImage(qimg)
 
-    #Conversion du mask_arteries en QPixmap
-    mask_arteries = np.ascontiguousarray(mask_arteries)
-    qimg_arteries = QImage (mask_arteries.data , w , h , 4*w, QImage.Format.Format_RGBA8888)
-    pixmap_arteries = QPixmap.fromImage(qimg_arteries)
-
-    #Conversion du mask_od en QPixmap
-    mask_od = np.ascontiguousarray(mask_od)
-    qimg_od = QImage (mask_od.data , w , h , 4*w, QImage.Format.Format_RGBA8888)
-    pixmap_od = QPixmap.fromImage(qimg_od)
+    pixmap_veins    = _masque_vers_pixmap(mask_veins)
+    pixmap_arteries = _masque_vers_pixmap(mask_arteries)
+    pixmap_od       = _masque_vers_pixmap(mask_od)
 
     return pixmap_fundus , pixmap_veins , pixmap_arteries , pixmap_od
 

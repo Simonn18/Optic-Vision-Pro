@@ -1,3 +1,4 @@
+import os
 import image_ref as ir
 
 def affiche_seg(self, sel: dict, chemin=None):
@@ -12,7 +13,9 @@ def affiche_seg(self, sel: dict, chemin=None):
         if "fundus_images" in ch:
             ch = ch.rsplit("fundus_images", 1)
             ch = f"segmentation_masks/{sous_dossier}".join(ch)
-            ch = ch.replace(".jpg", ext)
+            # Remplace l'extension réelle (.jpg, .jpeg, .png…) par celle du masque,
+            # quelle que soit l'extension de l'image source.
+            ch = os.path.splitext(ch)[0] + ext
         return ch
 
     couches = []
