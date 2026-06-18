@@ -4,3 +4,10 @@ env/
 .DS_Store
 build/
 .venv/
+
+# Données, artefacts de build et présentation (non versionnés)
+OPV.app/
+Présentation_web/
+ImagesTest/
+fundus_20_images/
+VNR-AV_2024.pdf
