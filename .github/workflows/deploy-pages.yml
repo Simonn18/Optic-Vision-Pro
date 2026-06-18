@@ -1,0 +1,44 @@
+name: Déploiement du site (GitHub Pages)
+
+# Déploie le contenu du dossier `site/` sur GitHub Pages.
+# Le site est servi à l'adresse : https://<user>.github.io/Optic-Vision-Pro/
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:        # permet un déclenchement manuel depuis l'onglet Actions
+
+# Permissions requises par les actions officielles Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Une seule exécution à la fois ; on n'annule pas un déploiement en cours
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Récupération du dépôt
+        uses: actions/checkout@v4
+
+      - name: Configuration de Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empaquetage du dossier site/
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Déploiement
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Optic Vision Pro — Guide d'utilisation</title>
+<meta name="description" content="Guide d'utilisation d'Optic Vision Pro : chargement des dossiers, segmentation, mesures et sauvegarde d'images du fond d'œil.">
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Open+Sans:wght@300;400;500;600&family=Fira+Code:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ░░ Barre de navigation ░░ -->
+<header class="topbar">
+  <a class="brand" href="#hero">
+    <img src="assets/logo.png" alt="Logo Optic Vision Pro">
+    <span>Optic Vision Pro</span>
+  </a>
+  <nav>
+    <a href="#chargement">1 · Chargement</a>
+    <a href="#segmentation">2 · Segmentation</a>
+    <a href="#mesures">3 · Mesures</a>
+    <a href="#sauvegarde">4 · Sauvegarde</a>
+    <a href="#astuces">Bon à savoir</a>
+    <a href="#installation">Installation</a>
+  </nav>
+</header>
+
+<!-- ░░ Hero ░░ -->
+<section id="hero" class="hero">
+  <div class="hero-grid">
+    <div class="hero-text">
+      <img src="assets/logo.png" alt="Optic Vision Pro" class="hero-logo">
+      <h1>Optic Vision Pro</h1>
+      <p class="tagline">
+        Analyse d'images du <strong>fond d'œil</strong> : détection des
+        <strong>vaisseaux</strong>, segmentation du <strong>disque optique</strong>
+        et <strong>mesures géométriques automatisées</strong> par zones.
+      </p>
+      <div class="hero-tags">
+        <span class="tag">PySide6 / Qt</span>
+        <span class="tag">Fundus / rétine</span>
+        <span class="tag">Veines &amp; artères</span>
+        <span class="tag">FR / EN</span>
+      </div>
+      <a class="cta" href="#chargement">Démarrer le guide →</a>
+    </div>
+    <figure class="hero-figure">
+      <div class="ba">
+        <img src="assets/fundus.jpg" alt="Image de fond d'œil originale">
+        <img src="assets/rendu.png" alt="Rendu segmenté : veines, artères, disque optique" class="ba-overlay">
+        <span class="ba-tag ba-tag-l">Image source</span>
+        <span class="ba-tag ba-tag-r">Rendu segmenté</span>
+      </div>
+      <figcaption>D'une photographie rétinienne brute au rendu segmenté : veines (bleu), artères (rouge), disque optique (vert).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<main>
+
+<!-- ░░ Vue d'ensemble du flux ░░ -->
+<section class="block overview">
+  <h2>Le flux de travail en 4 étapes</h2>
+  <p>Optic Vision Pro guide l'analyse de bout en bout. Une barre de statut rappelle l'étape courante en bas de la fenêtre.</p>
+  <div class="flow">
+    <a href="#chargement" class="flow-step"><span>1</span><strong>Chargement</strong><em>Dossier de travail &amp; images</em></a>
+    <span class="flow-arrow">→</span>
+    <a href="#segmentation" class="flow-step"><span>2</span><strong>Segmentation</strong><em>Couches &amp; disque optique</em></a>
+    <span class="flow-arrow">→</span>
+    <a href="#mesures" class="flow-step"><span>3</span><strong>Mesures</strong><em>Zones, vaisseaux, métriques</em></a>
+    <span class="flow-arrow">→</span>
+    <a href="#sauvegarde" class="flow-step"><span>4</span><strong>Sauvegarde</strong><em>Rendus &amp; export</em></a>
+  </div>
+</section>
+
+<!-- ░░ ÉTAPE 1 — Chargement des dossiers ░░ -->
+<section id="chargement" class="block">
+  <div class="step-head">
+    <span class="step-badge">Étape 1</span>
+    <h2>Chargement des dossiers</h2>
+  </div>
+  <p>
+    Au lancement, l'écran d'accueil propose deux modes —
+    <span class="kbd">PRÉ-TRAITEMENT</span> et <span class="kbd">TRAITEMENT D'IMAGE</span> —
+    ainsi qu'une bascule de langue <span class="kbd">English / Français</span>.
+  </p>
+
+  <figure class="video-figure">
+    <span class="video-tag">▶ Vidéo</span>
+    <video muted loop playsinline preload="none" controls poster="assets/poster-accueil.jpg">
+      <source src="assets/vid-accueil.mp4" type="video/mp4">
+      Votre navigateur ne lit pas les vidéos HTML5.
+    </video>
+    <figcaption>L'écran d'accueil d'Optic Vision Pro : choix du mode (pré-traitement / traitement d'image) et de la langue.</figcaption>
+  </figure>
+
+  <p>
+    L'analyse démarre par un <strong>dossier de travail</strong>. Depuis la barre du haut,
+    deux boutons : <span class="kbd">Ouvrir un dossier de travail</span> et
+    <span class="kbd">Ouvrir un dossier d'images</span>. Tant qu'aucun dossier n'est chargé,
+    la zone centrale invite à <em>« Ouvrez un dossier pour afficher les images »</em>.
+  </p>
+
+  <h3>Structure d'un dossier de travail</h3>
+  <p>Un dossier de travail valide regroupe les sous-dossiers attendus par l'application :</p>
+  <ul class="legend">
+    <li><code>fundus_images</code> — les photographies du fond d'œil à analyser.</li>
+    <li><code>segmentation_masks</code> — les masques (veines, artères, disque optique).</li>
+    <li><code>fundus_rendu_images_finales</code> — les rendus visuels générés.</li>
+    <li><code>results</code> — les fichiers de mesures exportés.</li>
+  </ul>
+</section>
+
+<!-- ░░ ÉTAPE 2 — Segmentation & lancement des mesures ░░ -->
+<section id="segmentation" class="block">
+  <div class="step-head">
+    <span class="step-badge">Étape 2</span>
+    <h2>Segmentation &amp; lancement des mesures</h2>
+  </div>
+  <p>
+    Une fois les images chargées, le panneau <strong>Segmentation</strong> (à gauche) pilote
+    l'affichage des couches et l'édition du disque optique. La barre de miniatures en bas permet
+    de naviguer (<span class="kbd">◀ Précédent</span> / <span class="kbd">Suivant ▶</span>).
+  </p>
+
+  <h3>Tutoriel : vérifier puis lancer les mesures</h3>
+  <div class="tuto">
+    <ol class="tuto-steps">
+      <li>
+        <span class="tuto-num">1</span>
+        <div>
+          <h4>Vérifiez les miniatures</h4>
+          <p>
+            Avant tout calcul, parcourez la <strong>barre de miniatures</strong> en bas de la fenêtre
+            et contrôlez, pour chaque image, que le <strong>disque optique</strong> (repère vert) est
+            <strong>bien placé</strong> — centré sur la papille, au bon diamètre. C'est lui qui définit
+            les zones concentriques : <strong>seules les images dont le disque est correctement
+            positionné seront mesurées</strong>.
+          </p>
+          <p class="tuto-tip">
+            💡 Si un disque est décalé, sélectionnez sa miniature, corrigez-le avec
+            <span class="kbd">Éditer le disque</span>, puis <span class="kbd">Valider les disques</span>.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="tuto-num">2</span>
+        <div>
+          <h4>Validez les disques, puis lancez les mesures</h4>
+          <p>
+            Appuyez sur <span class="kbd">Valider les disques</span>, puis sur
+            <span class="kbd">Lancer les mesures</span>. Le calcul se déclenche pour le lot
+            et le panneau de mesures s'ouvre.
+          </p>
+          <p class="tuto-tip">
+            ⏱️ Lancez les mesures <strong>dès le début</strong> de votre session : le calcul
+            peut être <strong>très long</strong> et se poursuit pendant que vous travaillez.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="tuto-num">3</span>
+        <div>
+          <h4>Laissez tourner en arrière-plan</h4>
+          <p>
+            Les mesures s'exécutent <strong>en arrière-plan</strong> : l'application reste utilisable
+            pendant le traitement et la barre de statut affiche l'avancement
+            (<em>« Calcul global en cours, veuillez patienter… »</em>). À la fin, un message confirme
+            <em>« Mesures terminées »</em> et les résultats apparaissent dans le panneau.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </div>
+
+  <figure class="video-figure">
+    <span class="video-tag">▶ Vidéo</span>
+    <video muted loop playsinline preload="none" controls poster="assets/poster-1.jpg">
+      <source src="assets/vid-1.mp4" type="video/mp4">
+      Votre navigateur ne lit pas les vidéos HTML5.
+    </video>
+    <figcaption>Ouvrir (ou créer) un dossier de travail puis charger un dossier d'images.</figcaption>
+  </figure>
+
+  <figure class="video-figure">
+    <span class="video-tag">▶ Vidéo</span>
+    <video muted loop playsinline preload="none" controls poster="assets/poster-2.jpg">
+      <source src="assets/vid-2.mp4" type="video/mp4">
+      Votre navigateur ne lit pas les vidéos HTML5.
+    </video>
+    <figcaption>Vérifier les miniatures, valider les disques puis lancer les mesures — le calcul tourne en arrière-plan pendant le réglage des couches, couleurs et opacités.</figcaption>
+  </figure>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon">🩸</div>
+      <h3>Couches disponibles</h3>
+      <p>Afficher/masquer <strong>Veines</strong>, <strong>Artères</strong> et <strong>Disque optique</strong>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎯</div>
+      <h3>Édition du disque</h3>
+      <p><span class="kbd">Créer un disque</span>, <span class="kbd">Éditer le disque</span> puis <span class="kbd">Valider les disques</span> — il sert de référence aux zones.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎨</div>
+      <h3>Couleurs</h3>
+      <p>Personnaliser la couleur des veines, artères, du disque et des superpositions.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🌓</div>
+      <h3>Opacité</h3>
+      <p>Régler l'opacité de chaque couche <strong>individuellement</strong> selon sa visibilité.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">↩️</div>
+      <h3>Réinitialiser</h3>
+      <p>Le bouton <span class="kbd">Réinitialiser les paramètres</span> remet couleurs et opacités d'origine.</p>
+    </div>
+  </div>
+  <p class="note">
+    Les couches <strong>Veines</strong>, <strong>Artères</strong> et <strong>Disque optique</strong>
+    sont cochées par défaut ; décochez celles dont vous n'avez pas besoin. La couleur de chaque
+    segmentation — et celle de la <strong>superposition artères/veines</strong> — est personnalisable.
+  </p>
+</section>
+
+<!-- ░░ ÉTAPE 3 — Mesures ░░ -->
+<section id="mesures" class="block">
+  <div class="step-head">
+    <span class="step-badge">Étape 3</span>
+    <h2>Mesures</h2>
+  </div>
+  <p>
+    Le panneau <strong>Mesures</strong> (à droite) configure le calcul. On choisit le
+    <strong>type de vaisseaux</strong>, les <strong>zones</strong> concernées et les
+    <strong>groupes de métriques</strong>, puis on exporte ou on affiche les résultats.
+  </p>
+
+  <figure class="video-figure">
+    <span class="video-tag">▶ Vidéo</span>
+    <video muted loop playsinline preload="none" controls poster="assets/poster-3.jpg">
+      <source src="assets/vid-3.mp4" type="video/mp4">
+      Votre navigateur ne lit pas les vidéos HTML5.
+    </video>
+    <figcaption>Le panneau Mesures : choix du type de vaisseaux, des zones et des groupes de mesures.</figcaption>
+  </figure>
+
+  <div class="cards cards-3">
+    <div class="card">
+      <div class="card-icon">🩸</div>
+      <h3>Type de vaisseaux</h3>
+      <p>Veines, Artères, ou <strong>Artères + Veines</strong>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⭕</div>
+      <h3>Zones</h3>
+      <p>Zone A, B, C, <strong>All</strong> ou <strong>Out</strong> — anneaux concentriques autour du disque.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📐</div>
+      <h3>Groupes de mesures</h3>
+      <p><strong>Contrôle qualité</strong>, <strong>Détection vaisseaux</strong>, <strong>Métriques géométriques</strong>.</p>
+    </div>
+  </div>
+
+  <p class="callout">
+    ⚠️ Les paramètres sont organisés en <strong>arborescence</strong> : vous devez sélectionner
+    <strong>au moins un paramètre par bloc</strong> (type de vaisseaux, zones, groupes de mesures)
+    pour pouvoir afficher ou exporter.
+  </p>
+
+  <h3>Afficher &amp; exporter les résultats</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon">👁️</div>
+      <h3>Afficher les mesures</h3>
+      <p>
+        <span class="kbd">Afficher les mesures</span> montre les valeurs de l'<strong>image active</strong>
+        pour les paramètres choisis. Pour voir une autre image : <strong>cliquez sur sa miniature</strong>
+        puis ré-appuyez sur <span class="kbd">Afficher les mesures</span>.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📤</div>
+      <h3>Exporter les mesures</h3>
+      <p>
+        Export au format <strong>texte</strong> — pour <strong>toutes les images</strong> ou seulement
+        l'image active à l'écran, selon les paramètres sélectionnés.
+      </p>
+    </div>
+  </div>
+
+  <h3>Zones concentriques autour du disque optique</h3>
+  <div class="zones-layout">
+    <figure class="zone-figure">
+      <svg viewBox="0 0 300 300" role="img" aria-label="Zones concentriques A, B, C autour du disque optique">
+        <circle cx="150" cy="150" r="125" fill="#0369a122" stroke="#38bdf8" stroke-width="1.5"/>
+        <circle cx="150" cy="150" r="78"  fill="#7c5fff22" stroke="#a78bfa" stroke-width="1.5"/>
+        <circle cx="150" cy="150" r="48"  fill="#22c55e2e" stroke="#4ade80" stroke-width="1.5"/>
+        <circle cx="150" cy="150" r="22"  fill="#22c55e" stroke="#4ade80" stroke-width="2"/>
+        <line x1="150" y1="25" x2="150" y2="275" stroke="#ffffff44" stroke-dasharray="4 4"/>
+        <line x1="25" y1="150" x2="275" y2="150" stroke="#ffffff44" stroke-dasharray="4 4"/>
+        <text x="150" y="154" text-anchor="middle" fill="#06210f" font-size="10" font-weight="700">OD</text>
+        <text x="150" y="40"  text-anchor="middle" fill="#cbd5e1" font-size="10">N</text>
+        <text x="263" y="154" text-anchor="middle" fill="#cbd5e1" font-size="10">E</text>
+        <text x="150" y="268" text-anchor="middle" fill="#cbd5e1" font-size="10">S</text>
+        <text x="37"  y="154" text-anchor="middle" fill="#cbd5e1" font-size="10">O</text>
+      </svg>
+      <figcaption>Zones concentriques (OD, A, B, C) et quadrants N / E / S / O.</figcaption>
+    </figure>
+    <div class="zones-table-wrap">
+      <table class="zones-table">
+        <thead><tr><th>Zone</th><th>Rayon</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dot green"></span>OD</td><td>R</td><td>Disque optique — la référence.</td></tr>
+          <tr><td><span class="dot green2"></span>Zone A</td><td>2 × R</td><td>Premier anneau péripapillaire.</td></tr>
+          <tr><td><span class="dot purple"></span>Zone B</td><td>3 × R</td><td>Anneau intermédiaire.</td></tr>
+          <tr><td><span class="dot blue"></span>Zone C</td><td>5 × R</td><td>Anneau le plus large.</td></tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Pour chaque zone et chaque quadrant (Nord, Est, Sud, Ouest), l'application calcule
+        l'aire, l'aire visible et des métriques de vaisseaux (nombre de croisements, calibre moyen…).
+        Exemple de sortie : <code>nbXFC_B</code>, <code>meanCaliberF</code>, <code>sdBigXCaliber</code>…
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ ÉTAPE 4 — Sauvegarde ░░ -->
+<section id="sauvegarde" class="block">
+  <div class="step-head">
+    <span class="step-badge">Étape 4</span>
+    <h2>Sauvegarde &amp; export</h2>
+  </div>
+  <p>
+    La sauvegarde se fait dans le dossier choisi via <span class="kbd">Ouvrir un dossier de travail</span>.
+    Les résultats y sont organisés en <strong>4 sous-dossiers</strong>.
+  </p>
+
+  <h3>Structure de sauvegarde</h3>
+  <ul class="legend">
+    <li><code>fundus_images</code> — les images d'origine, avec un <strong>JSON de paramétrage</strong> (couleurs et opacités).</li>
+    <li><code>fundus_rendu_images_finales</code> — les images <strong>PNG</strong> : l'image d'origine avec les segmentations paramétrées superposées.</li>
+    <li><code>results</code> — un fichier de <strong>mesures globales</strong> + un <strong>fichier JSON par image</strong>.</li>
+    <li><code>segmentation_masks</code> — les masques de segmentation (veines, artères, disque optique).</li>
+  </ul>
+
+  <h3>Les options de sauvegarde</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon">💾</div>
+      <h3>Sauvegarder</h3>
+      <p>Enregistre l'<strong>image en cours de traitement</strong> selon la structure ci-dessus.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🗂️</div>
+      <h3>Sauvegarder toutes les images</h3>
+      <p>
+        Enregistre <strong>tout le dossier</strong>, au choix : <strong>un dossier par image</strong>
+        (5 images → 5 dossiers) ou <strong>un seul dossier</strong> pour toutes les images.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-icon">✅</div>
+      <h3>Sélection</h3>
+      <p>
+        <span class="kbd">Sélection</span> crée un dossier à côté avec un sous-ensemble d'images :
+        cliquez directement sur les <strong>miniatures</strong>, un <strong>cadre vert</strong>
+        entoure les images choisies.
+      </p>
+    </div>
+  </div>
+
+  <figure class="video-figure">
+    <span class="video-tag">▶ Vidéo</span>
+    <video muted loop playsinline preload="none" controls poster="assets/poster-4.jpg">
+      <source src="assets/vid-4.mp4" type="video/mp4">
+      Votre navigateur ne lit pas les vidéos HTML5.
+    </video>
+    <figcaption>Afficher puis exporter les mesures au format texte — pour toutes les images ou seulement l'image active.</figcaption>
+  </figure>
+
+  <figure class="video-figure">
+    <span class="video-tag">▶ Vidéo</span>
+    <video muted loop playsinline preload="none" controls poster="assets/poster-5.jpg">
+      <source src="assets/vid-5.mp4" type="video/mp4">
+      Votre navigateur ne lit pas les vidéos HTML5.
+    </video>
+    <figcaption>Sauvegarder l'image courante ou tout le dossier (un dossier par image ou un seul) — les rendus finaux sont mis à jour.</figcaption>
+  </figure>
+</section>
+
+<!-- ░░ Bon à savoir ░░ -->
+<section id="astuces" class="block">
+  <h2>Bon à savoir</h2>
+  <p>Optic Vision Pro travaille directement dans le dossier d'images pour vous éviter de tout relancer.</p>
+  <div class="cards cards-3">
+    <div class="card">
+      <div class="card-icon">🔄</div>
+      <h3>Paramètres synchronisés</h3>
+      <p>Les modifications se font dans le dossier d'images : les paramètres y sont <strong>mis à jour à chaque fois</strong>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🖼️</div>
+      <h3>Mise à jour des rendus</h3>
+      <p>Pour rafraîchir <code>fundus_rendu_images_finales</code>, cliquez sur <span class="kbd">Sauvegarder les rendus</span>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚡</div>
+      <h3>Mesures conservées</h3>
+      <p>Si des mesures existent déjà dans le dossier, le panneau Mesures <strong>s'affiche directement</strong> — pas besoin de relancer le calcul.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ Installation ░░ -->
+<section id="installation" class="block">
+  <h2>Installation &amp; lancement</h2>
+  <p>L'application repose sur Python 3. Pour l'exécuter depuis les sources :</p>
+  <pre><code># 1. Installer les dépendances
+pip install -r requirements.txt
+
+# 2. Lancer l'application
+python newapp.py</code></pre>
+
+  <p>Pour générer un exécutable autonome :</p>
+  <pre><code># Avec PyInstaller
+pip install pyinstaller
+pyinstaller newapp.spec
+
+# ou avec Nuitka
+./build_nuitka.sh</code></pre>
+
+  <h3>Dépendances principales</h3>
+  <div class="deps">
+    <span class="tag">PySide6</span><span class="tag">NumPy</span><span class="tag">OpenCV</span>
+    <span class="tag">scikit-image</span><span class="tag">SciPy</span><span class="tag">Pillow</span>
+    <span class="tag">tifffile</span><span class="tag">imageio</span>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <img src="assets/logo.png" alt="" class="footer-logo">
+  <p>Optic Vision Pro — Guide d'utilisation</p>
+  <p class="small">Document généré à partir du code et des captures de l'application.</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
