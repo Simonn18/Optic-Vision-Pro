@@ -777,6 +777,7 @@ class MainWindow(QMainWindow):
         btn_layout.addWidget(self.btn_traitement)
 
         container_layout.addWidget(self.btn_langue, alignment=Qt.AlignRight)
+        container_layout.addWidget(self.btn_aide, alignment=Qt.AlignRight)
         container_layout.addWidget(self.logo)
         container_layout.addWidget(btn_row)
 
@@ -842,7 +843,7 @@ class MainWindow(QMainWindow):
         # --- Barre haute ---
         self.dossier_travail.setText(T["btn_dossier_travail"])
         self.btn_dossier.setText(T["btn_dossier_images"])
- 
+        self.help.setText(T["btn_help"])
         # --- Barre d'actions ---
         self.btn_precedent.setText(T["btn_precedent"])
         self.btn_suivant.setText(T["btn_suivant"])
@@ -905,7 +906,6 @@ class MainWindow(QMainWindow):
         self.lbl_placeholder.show()
         self.dossier_travail.setEnabled(True)
         self.btn_dossier.setEnabled(True)
-        self.statusBar().showMessage(self.T["status_etape1"])
         self.topbar.show()
         
     def reset(self):

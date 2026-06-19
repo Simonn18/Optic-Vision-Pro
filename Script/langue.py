@@ -14,6 +14,10 @@ TEXTES = {
         "fr": "Ouvrir un dossier de travail",
         "en": "Open a working folder",
     },
+    "btn_help":{
+        "fr": "Aide",
+        "en": "Help",
+    },
     "btn_dossier_images": {
         "fr": "Ouvrir un dossier d'images",
         "en": "Open an image folder",
