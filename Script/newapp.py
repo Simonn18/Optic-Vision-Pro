@@ -9,13 +9,13 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QScrollArea, QLabel, QFileDialog, QGraphicsScene,
     QGraphicsView, QSizePolicy, QMessageBox, QGraphicsItem, QInputDialog,
-    QDialog, QProgressBar
+    QDialog, QProgressBar, QGraphicsEllipseItem
 )
 
 import struct
 from PySide6 import QtGui
 from PySide6.QtCore import Qt, Signal, QThread, QUrl
-from PySide6.QtGui import QPixmap, QIcon, QPainter, QAction  ,QImage, QColor, QDesktopServices
+from PySide6.QtGui import QPixmap, QIcon, QPainter, QAction  ,QImage, QColor, QDesktopServices, QPen, QColor
 
 import opacite as op
 import mesures_box as mb
@@ -536,6 +536,7 @@ class MainWindow(QMainWindow):
         self.chemin_image = None
         self.path_image_courante = None
         self.list_paths = None
+        self.AOI = None
         self.langue_courante = LANGUE_DEFAUT          # "fr" ou "en"
         self.T = changement_langue(self.langue_courante)  # dictionnaire actif
         # Couleurs par défaut des masques
@@ -593,6 +594,11 @@ class MainWindow(QMainWindow):
         self.actEditerDisque = QAction("Éditer le disque optique", self)
         self.actEditerDisque.setCheckable(True)
         self.actEditerDisque.triggered.connect(self.edit_disque_optique)
+
+
+        self.actAfficherZonesInteret = QAction("Afficher les Zones d'intérêt", self)
+        self.actAfficherZonesInteret.setCheckable(True)
+        self.actAfficherZonesInteret.triggered.connect(self.afficher_zones)
 
         # Widget central
         central = QWidget()
@@ -1458,7 +1464,39 @@ class MainWindow(QMainWindow):
                 StyledMessageBox.information(self, "Annulé", "Le déplacement du disque optique a été annulé.")
                 self.item_od.setPos(0, 0)
 
-    
+    def afficher_zones(self, state = None) :
+
+        if state is None : 
+            state = self.actAfficherZonesInteret.isChecked()
+        
+        self.actAfficherZonesInteret.setChecked(state)
+
+        if self.segmentation_window:
+            self.segmentation_window.btn_afficher_zones_interet.setChecked(state)
+
+        if state : 
+            self.AOI = []
+
+            standard_radius = 76
+            centre_local = self.item_od.boundingRect().center()
+            print (self.item_od.boundingRect() )
+            
+            for multiplier in [2, 3, 5]:
+                r = multiplier * standard_radius
+                ellipse = QGraphicsEllipseItem(-r, -r, 2*r, 2*r)
+                ellipse.setParentItem(self.item_od)
+                ellipse.setPos(centre_local)
+                ellipse.setPen(QPen(QColor("white"), 3))
+                self.AOI.append(ellipse)
+
+            for i in self.AOI :
+                self.scene.addItem(i)
+                
+        
+        if self.AOI and not state :
+            for i in self.AOI :
+                self.scene.removeItem(i)
+        
 
     #=================Lancer mesure=======================
 

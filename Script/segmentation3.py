@@ -181,6 +181,7 @@ class SegmentationToolbox(QDockWidget):
     QPushButton#btn_couleur_veines  { color: #2a6496; }
     QPushButton#btn_couleur_arteres { color: #e74c3c; }
     QPushButton#btn_couleur_disque  { color: #27ae60; }
+    QPushButton#btn_afficher_zones  { color: #000000}
     """
 
     SLIDER_COLORS = {
@@ -237,6 +238,11 @@ class SegmentationToolbox(QDockWidget):
         self.btn_lancer  = QPushButton("Lancer les mesures")
         self.btn_lancer.setEnabled(False)
 
+        self.btn_afficher_zones_interet = QPushButton("Afficher les zones d'intérêt")
+        self.btn_afficher_zones_interet.setEnabled(True)
+        self.btn_afficher_zones_interet.setCheckable(True)
+        self.btn_afficher_zones_interet.setObjectName("btn_afficher_zones")
+
         self.btn_creer_disque.setObjectName("btn_creer_disque")
         self.btn_editer.setObjectName("btn_editer")
         self.btn_editer.setEnabled(False)
@@ -281,7 +287,7 @@ class SegmentationToolbox(QDockWidget):
         # Groupe couches
         self.group_couches = self._groupe("Couches disponibles", [
             self.cb_veines, self.cb_arteres, self.cb_disque, self.btn_creer_disque,
-            self.btn_editer, self.btn_valider,
+            self.btn_editer, self.btn_valider, self.btn_afficher_zones_interet
         ])
         self.main_layout.addWidget(self.group_couches)
 
@@ -323,6 +329,7 @@ class SegmentationToolbox(QDockWidget):
 
         self.btn_creer_disque.clicked.connect(self._on_creer_disque)
         self.btn_editer.clicked.connect(self._on_editer_disque)
+        self.btn_afficher_zones_interet.clicked.connect(self._on_afficher_zones)
         self.btn_valider.clicked.connect(self._on_valider_disque)
         self.btn_lancer.clicked.connect(self._on_lancer_mesures)
 
@@ -521,6 +528,14 @@ class SegmentationToolbox(QDockWidget):
         else:
             print("Erreur : le parent ne peut pas modifier le disque")
 
+    def _on_afficher_zones(self, checked = None):
+        parent = self.parent()
+        if parent and hasattr(parent, "afficher_zones"):
+            parent.afficher_zones(checked)
+        else : 
+            print("Erreur : le parent ne peut pas afficher les zones")
+
+        
     def _on_valider_disque(self):
         parent = self.parent()
         T = getattr(parent, "T", None) if parent else None

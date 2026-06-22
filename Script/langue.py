@@ -266,6 +266,10 @@ TEXTES = {
         "fr": "Lancer les mesures",
         "en": "Run measurements",
     },
+    "seg_btn_afficher_zones": {
+        "fr": "Afficher les zones d'intérêt",
+        "en": "Show areas of interest",
+    },
     "btn_maj_rendu": {
         "fr": "Sauvegarder les rendus",
         "en": "Save renderings",
