@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 import struct
 from PySide6 import QtGui
-from PySide6.QtCore import Qt, Signal, QThread, QUrl
+from PySide6.QtCore import Qt, Signal, QThread, QUrl, QPointF
 from PySide6.QtGui import QPixmap, QIcon, QPainter, QAction  ,QImage, QColor, QDesktopServices, QPen, QColor
 
 import opacite as op
@@ -22,7 +22,7 @@ import mesures_box as mb
 import segmentation3 as seg
 import measurements as m_script
 import read_csv as rc
-from chargement_images import load_images, images_paths
+from chargement_images import load_images, images_paths, centre_disque_optique, masque_od_recale
 from affichage_images import conversion_qpixmap
 import cv2
 from langue import changement_langue, LANGUE_DEFAUT
@@ -255,7 +255,7 @@ class ImageStrip(QWidget):
                         break
  
                 if masque:
-                    pixmap = self._superposer_masque(pixmap, masque)
+                    pixmap = self._superposer_masque(pixmap, chemin, masque)
  
             btn = QPushButton()
             btn.setFixedSize(88, 96)
@@ -270,24 +270,34 @@ class ImageStrip(QWidget):
             self.boutons.append(btn)
  
     @staticmethod
-    def _superposer_masque(pixmap_base: QPixmap, chemin_masque: str) -> QPixmap:
-        """Superpose le masque OD colorisé en vert sur la miniature."""
+    def _superposer_masque(pixmap_base: QPixmap, chemin_fundus: str, chemin_masque: str) -> QPixmap:
+        """Superpose le masque OD colorisé en vert sur la miniature.
 
+        Le masque est d'abord recalé dans le repère du fundus (même traitement
+        que l'image principale) pour que l'aperçu soit fidèle : un disque mal
+        placé se voit directement sur la miniature."""
 
-        masque_img = QImage(chemin_masque).scaled(
-            pixmap_base.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        ).convertToFormat(QImage.Format.Format_ARGB32)
+        try:
+            masque = masque_od_recale(chemin_fundus, chemin_masque)
+        except Exception:
+            return pixmap_base  # masque illisible : on garde la miniature brute
 
-        # Remplacer chaque pixel blanc/clair du masque par du vert semi-transparent
-        vert = QImage(masque_img.size(), QImage.Format.Format_ARGB32)
-        vert.fill(Qt.transparent)
-        for y in range(masque_img.height()):
-            for x in range(masque_img.width()):
-                pixel = masque_img.pixel(x, y)
-                r = (pixel >> 16) & 0xFF
-                if r > 30:  # pixel actif (non noir)
-                    alpha = min(255, int(r * 0.85))
-                    vert.setPixel(x, y, QColor(0, 220, 80, alpha).rgba())
+        # Construction vectorisée (numpy) de l'overlay vert RGBA. On laisse le RGB
+        # vert constant partout et on ne fait varier que l'alpha : le lissage du
+        # scaling ne fait alors que dégrader l'alpha sur les bords (pas de
+        # bavure du vert vers le noir).
+        h, w = masque.shape
+        overlay = np.zeros((h, w, 4), dtype=np.uint8)
+        overlay[..., 1] = 220                     # G
+        overlay[..., 2] = 80                      # B
+        overlay[masque > 30, 3] = 216             # alpha = int(255 * 0.85) où actif
+        overlay = np.ascontiguousarray(overlay)
+
+        vert = QImage(overlay.data, w, h, 4 * w, QImage.Format.Format_RGBA8888).copy()
+        # Mêmes dimensions/aspect que pixmap_base (issu du même fundus) -> alignement exact.
+        vert = vert.scaled(
+            pixmap_base.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+        )
 
         resultat = QPixmap(pixmap_base.size())
         resultat.fill(Qt.transparent)
@@ -1447,7 +1457,7 @@ class MainWindow(QMainWindow):
                                 80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
                             )
                             pixmap_mini = self.image_strip.strip_fundus._superposer_masque(
-                                pixmap_mini, chemin_od
+                                pixmap_mini, self.chemin_image, chemin_od
                             )
                             btn = self.image_strip.strip_fundus.boutons[idx]
                             btn.setIcon(QIcon(pixmap_mini))
@@ -1474,29 +1484,59 @@ class MainWindow(QMainWindow):
         if self.segmentation_window:
             self.segmentation_window.btn_afficher_zones_interet.setChecked(state)
 
-        if state : 
+        # Toujours retirer les anciennes zones avant de (re)dessiner.
+        self._effacer_zones()
+
+        if state and self.item_od:
             self.AOI = []
 
             standard_radius = 76
-            centre_local = self.item_od.boundingRect().center()
-            print (self.item_od.boundingRect() )
-            
+            centre_local = self._centre_disque_optique()
+
             for multiplier in [2, 3, 5]:
                 r = multiplier * standard_radius
                 ellipse = QGraphicsEllipseItem(-r, -r, 2*r, 2*r)
+                # setParentItem ajoute déjà l'ellipse à la scène de item_od.
                 ellipse.setParentItem(self.item_od)
                 ellipse.setPos(centre_local)
                 ellipse.setPen(QPen(QColor("white"), 3))
                 self.AOI.append(ellipse)
 
-            for i in self.AOI :
-                self.scene.addItem(i)
-                
-        
-        if self.AOI and not state :
-            for i in self.AOI :
-                self.scene.removeItem(i)
-        
+    def _effacer_zones(self):
+        """Retire les zones d'intérêt de la scène en tolérant les objets
+        C++ déjà détruits (par ex. après un self.scene.clear())."""
+        if not self.AOI:
+            return
+        for i in self.AOI:
+            try:
+                if i.scene() is not None:
+                    self.scene.removeItem(i)
+            except RuntimeError:
+                # L'objet C++ a déjà été détruit (scene.clear()), rien à faire.
+                pass
+        self.AOI = None
+
+    def _centre_disque_optique(self):
+        """Renvoie le centre du disque optique (QPointF, en coordonnées
+        locales de item_od) calculé à partir du barycentre du masque.
+        Repli sur le centre de l'image si le masque est vide ou illisible."""
+        centre_image = self.item_od.boundingRect().center()
+
+        if not self.list_paths or len(self.list_paths) <= 3:
+            return centre_image
+
+        try:
+            centre = centre_disque_optique(self.list_paths)
+        except Exception:
+            return centre_image
+
+        if centre is None:
+            return centre_image
+
+        # centre est déjà recalé dans le repère du fundus, identique aux coords
+        # locales de item_od (pixmap à l'origine, 1 px = 1 unité de scène).
+        return QPointF(centre[0], centre[1])
+
 
     #=================Lancer mesure=======================
 

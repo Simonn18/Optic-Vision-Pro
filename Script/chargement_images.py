@@ -87,6 +87,44 @@ def images_paths (path_image_ref) :
 # def recuperation_couleur(color):
 #     return color
 
+def _normalise_rgb(image):
+    """Force une image vers 3 canaux RGB : gère le niveaux de gris (2D) et le
+    RGBA (4 canaux), sinon le transpose suppose à tort 3 canaux et casse
+    l'affichage des PNG."""
+    if image.ndim == 2:                                   # niveaux de gris
+        image = np.stack([image] * 3, axis=-1)
+    elif image.ndim == 3 and image.shape[2] == 4:         # RGBA
+        image = image[:, :, :3]
+    return image
+
+
+def _placer_masque(chemin, h, w, sx0, sy0, side):
+    """Recale un masque (carré, issu d'un crop du champ de vue) dans le repère
+    (h, w) du fundus : resize vers le carré du FOV puis dépose à sa position.
+
+    Les masques sont carrés (ex. 1024x1024) car la segmentation est faite sur un
+    CROP CARRÉ centré sur le champ de vue (la rétine), pas sur l'image entière.
+    Un simple resize vers (h, w) étirerait le masque et décalerait le centre
+    quand le fundus n'est pas carré ; si la rétine remplit déjà le cadre (JPG OVP
+    déjà recadrés), le carré = image entière -> mapping 1:1.
+    """
+    m = ski.io.imread(chemin)
+    # Réduit un masque RGB/RGBA en 2D. On ignore le canal alpha : sinon un PNG
+    # RGBA avec alpha=255 partout marquerait toute l'image comme active.
+    if m.ndim == 3:
+        m = m[:, :, :3].max(axis=2)
+    # Redimensionne le masque au côté du carré du champ de vue (order=0 = plus
+    # proche voisin -> reste binaire) puis le dépose à la bonne position.
+    m = ski.transform.resize(
+            m, (side, side), order=0, preserve_range=True, anti_aliasing=False
+        ).astype(m.dtype)
+    plein = np.zeros((h, w), dtype=m.dtype)
+    ax0, ay0 = max(sx0, 0), max(sy0, 0)
+    ax1, ay1 = min(sx0 + side, w), min(sy0 + side, h)
+    plein[ay0:ay1, ax0:ax1] = m[ay0 - sy0:ay1 - sy0, ax0 - sx0:ax1 - sx0]
+    return plein
+
+
 def load_images(list_paths,
                 couleur_veines=(0, 0, 255, 255),
                 couleur_arteres=(255, 0, 100, 255),
@@ -99,44 +137,14 @@ def load_images(list_paths,
     (cf. chargement_images_old.py), mais en une fraction du temps.
     """
 
-    image_originale = ski.io.imread(list_paths[0])
-    # Normalise vers 3 canaux RGB : gère le niveaux de gris (2D) et le RGBA (4 canaux),
-    # sinon le transpose suppose à tort 3 canaux et casse l'affichage des PNG.
-    if image_originale.ndim == 2:                       # niveaux de gris
-        image_originale = np.stack([image_originale] * 3, axis=-1)
-    elif image_originale.ndim == 3 and image_originale.shape[2] == 4:  # RGBA
-        image_originale = image_originale[:, :, :3]
+    image_originale = _normalise_rgb(ski.io.imread(list_paths[0]))
     h, w = image_originale.shape[:2]
 
-    # --- Recalage géométrique masques -> fundus ---------------------------------
-    # Les masques sont carrés (ex. 1024x1024) car la segmentation est faite sur un
-    # CROP CARRÉ centré sur le champ de vue (la rétine), pas sur l'image entière.
-    # Un simple resize vers (h, w) étirerait le masque et décalerait le centre
-    # quand le fundus n'est pas carré. On retrouve donc le carré du champ de vue
-    # et on y replace le masque ; si la rétine remplit déjà le cadre (cas des
-    # fundus déjà recadrés / JPG OVP), le carré = image entière -> mapping 1:1.
     sx0, sy0, side = _fov_square(image_originale)
 
-    def _placer_masque(chemin):
-        m = ski.io.imread(chemin)
-        # Réduit un masque RGB/RGBA en 2D. On ignore le canal alpha : sinon un PNG
-        # RGBA avec alpha=255 partout marquerait toute l'image comme active.
-        if m.ndim == 3:
-            m = m[:, :, :3].max(axis=2)
-        # Redimensionne le masque au côté du carré du champ de vue (order=0 = plus
-        # proche voisin -> reste binaire) puis le dépose à la bonne position.
-        m = ski.transform.resize(
-                m, (side, side), order=0, preserve_range=True, anti_aliasing=False
-            ).astype(m.dtype)
-        plein = np.zeros((h, w), dtype=m.dtype)
-        ax0, ay0 = max(sx0, 0), max(sy0, 0)
-        ax1, ay1 = min(sx0 + side, w), min(sy0 + side, h)
-        plein[ay0:ay1, ax0:ax1] = m[ay0 - sy0:ay1 - sy0, ax0 - sx0:ax1 - sx0]
-        return plein
-
-    mask_veins_raw    = _placer_masque(list_paths[1])
-    mask_arteries_raw = _placer_masque(list_paths[2])
-    mask_od_raw       = _placer_masque(list_paths[3])
+    mask_veins_raw    = _placer_masque(list_paths[1], h, w, sx0, sy0, side)
+    mask_arteries_raw = _placer_masque(list_paths[2], h, w, sx0, sy0, side)
+    mask_od_raw       = _placer_masque(list_paths[3], h, w, sx0, sy0, side)
 
     image_originale = np.transpose(image_originale, (2, 0, 1))
 
@@ -159,3 +167,33 @@ def load_images(list_paths,
     mask_od[disque] = couleur_disque
 
     return image_originale, mask_veins, mask_arteries, mask_od
+
+
+def masque_od_recale(chemin_fundus, chemin_masque):
+    """Masque du disque optique recalé dans le repère du fundus (2D uint8 0/255,
+    dimensions (h, w) du fundus).
+
+    Applique EXACTEMENT le même recalage que load_images, afin que l'aperçu des
+    miniatures soit fidèle à l'affichage de l'image principale.
+    """
+    image = _normalise_rgb(ski.io.imread(chemin_fundus))
+    h, w = image.shape[:2]
+    sx0, sy0, side = _fov_square(image)
+
+    m = _placer_masque(chemin_masque, h, w, sx0, sy0, side)
+    return (m > 0).astype(np.uint8) * 255
+
+
+def centre_disque_optique(list_paths):
+    """Centre (x, y) du disque optique dans le repère du fundus, ou None si vide.
+
+    Applique EXACTEMENT le même recalage géométrique que load_images (carré du
+    champ de vue + resize du masque carré), de sorte que le centre renvoyé
+    corresponde à la position du disque telle qu'affichée sur l'image principale.
+    """
+    m = masque_od_recale(list_paths[0], list_paths[3])
+    ys, xs = np.nonzero(m)
+    if xs.size == 0:
+        return None
+
+    return float(xs.mean()), float(ys.mean())
