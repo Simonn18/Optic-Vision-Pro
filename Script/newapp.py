@@ -1434,9 +1434,27 @@ class MainWindow(QMainWindow):
                     masque = cv2.imread(chemin_od, cv2.IMREAD_GRAYSCALE)
                     if masque is not None:
                         h, w = masque.shape
-                        M    = np.float32([[1, 0, dx], [0, 1, dy]])
-                        masque_deplace = cv2.warpAffine(masque, M, (w, h))
-                        cv2.imwrite(chemin_od, masque_deplace)
+                        rayon = 76
+
+                        # Détecter le centre actuel du cercle dans le masque
+                        contours, _ = cv2.findContours(masque, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        if contours:
+                            (cx, cy), _ = cv2.minEnclosingCircle(max(contours, key=cv2.contourArea))
+
+                            # Nouvelle position souhaitée après déplacement
+                            nouveau_cx = cx + dx
+                            nouveau_cy = cy + dy
+
+                            # Clamp pour que le cercle reste entièrement dans l'image
+                            nouveau_cx = max(rayon, min(w - rayon, nouveau_cx))
+                            nouveau_cy = max(rayon, min(h - rayon, nouveau_cy))
+
+                            # Redessiner un cercle plein et net à la nouvelle position
+                            masque_deplace = np.zeros((h, w), dtype=np.uint8)
+                            cv2.circle(masque_deplace, (int(round(nouveau_cx)), int(round(nouveau_cy))), rayon, 255, -1)
+
+                            cv2.imwrite(chemin_od, masque_deplace)
+
 
                         # Recharger le pixmap OD depuis le fichier mis à jour
                         # On force Qt à ne pas utiliser de cache en passant par QImage
@@ -1490,7 +1508,16 @@ class MainWindow(QMainWindow):
         if state and self.item_od:
             self.AOI = []
 
-            standard_radius = 76
+            img = cv2.imread(self.list_paths[3], cv2.IMREAD_GRAYSCALE)
+
+            _, thresh = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+            
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            cnt = max(contours, key=cv2.contourArea)
+            
+            (x, y), standard_radius = cv2.minEnclosingCircle(cnt)
+
             centre_local = self._centre_disque_optique()
 
             for multiplier in [2, 3, 5]:
@@ -1537,7 +1564,7 @@ class MainWindow(QMainWindow):
         # locales de item_od (pixmap à l'origine, 1 px = 1 unité de scène).
         return QPointF(centre[0], centre[1])
 
-
+    
     #=================Lancer mesure=======================
 
     def trouver_json_mesures(self, nom_json):
